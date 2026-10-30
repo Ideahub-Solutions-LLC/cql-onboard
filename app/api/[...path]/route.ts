@@ -14,7 +14,9 @@ async function handler(req:Request){try{
  const db=env.DB!;if(!db)return json({error:'Storage is not configured.'},503);
  if(req.method!=='GET'){const origin=req.headers.get('origin');if(!origin||origin!==new URL(req.url).origin)return json({error:'Invalid request origin.'},403);}
  const owner=await db.prepare('SELECT value FROM settings WHERE id = ?').bind('owner').first<{value:string}>();
- // Initial ownership is established only inside the newly created owner-private Site.
+ // Vercel deployments are public by default, so the configured owner must claim
+ // the empty database before the normal Sites first-visitor bootstrap is allowed.
+ if(!owner&&process.env.VERCEL){const ownerEmail=process.env.CQL_OWNER_EMAIL?.trim().toLowerCase();if(!ownerEmail)return json({error:'Set CQL_OWNER_EMAIL before using this deployment.'},503);if(user.email.toLowerCase()!==ownerEmail)return json({error:'This workspace has not been initialized by its configured owner.'},403);}
  if(!owner)await db.prepare('INSERT OR IGNORE INTO settings (id,value) VALUES (?,?)').bind('owner',user.userId).run();
  const ownerNow=owner||await db.prepare('SELECT value FROM settings WHERE id = ?').bind('owner').first<{value:string}>();
  const cfgRow=await db.prepare('SELECT value FROM settings WHERE id = ?').bind('config').first<{value:string}>();

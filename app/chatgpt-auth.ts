@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { cookieValue, sessionCookieName, verifyGoogleSession } from "./auth-session";
 
 export type ChatGPTUser = {
   userId: string;
@@ -20,23 +21,27 @@ const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
-  const userId = requestHeaders.get(USER_ID_HEADER);
-  const email = requestHeaders.get(USER_EMAIL_HEADER);
-  if (!userId || !email) return null;
+  // Sites supplies these trusted headers in its hosted runtime and local preview.
+  // On Vercel, browser supplied headers are untrusted; use the signed session.
+  if (process.env.VERCEL !== "1" && process.env.VERCEL !== "true") {
+    const userId = requestHeaders.get(USER_ID_HEADER);
+    const email = requestHeaders.get(USER_EMAIL_HEADER);
+    if (userId && email) {
+      const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
+      const fullName =
+        encodedFullName &&
+        requestHeaders.get(USER_FULL_NAME_ENCODING_HEADER) === PERCENT_ENCODED_UTF8
+          ? safeDecodeURIComponent(encodedFullName)
+          : null;
+      return { userId, displayName: fullName ?? email, email, fullName };
+    }
+  }
 
-  const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get(USER_FULL_NAME_ENCODING_HEADER) === PERCENT_ENCODED_UTF8
-      ? safeDecodeURIComponent(encodedFullName)
-      : null;
-
-  return {
-    userId,
-    displayName: fullName ?? email,
-    email,
-    fullName,
-  };
+  const secure = process.env.VERCEL === "1" || process.env.VERCEL === "true";
+  const cookieHeader = requestHeaders.get("cookie");
+  const token = cookieValue(cookieHeader, sessionCookieName(secure)) ??
+    cookieValue(cookieHeader, sessionCookieName(!secure));
+  return token ? verifyGoogleSession(token) : null;
 }
 
 export async function requireChatGPTUser(

@@ -59,15 +59,38 @@ The preview runs the app with local Cloudflare Worker bindings and a local mock 
 ### Useful commands
 
 ```sh
-npm run build       # Build the Cloudflare Workers output
-npm start            # Run the built app in the local Wrangler preview
+npm run build       # Build for the current deployment target
+npm start            # Run the Cloudflare build in the local Wrangler preview
 npm test             # Run catalog, pricing, and onboarding unit checks
-npm run db:generate  # Generate a Drizzle migration from db/schema.ts
+npm run db:generate  # Generate a Cloudflare D1 migration from db/schema.ts
 ```
 
 Run `npm run build` before `npm start`. `npm run test:api` runs API integration checks against `127.0.0.1:8787` and an isolated synthetic local database; never point those tests at production.
 
-## Deploy/runtime requirements
+## Deploy to Vercel
+
+The Vercel build uses Vinext with Vite and Nitro. The included `vercel.json` selects Vercel's **Other** framework preset and runs `npm ci` followed by `npm run build`. Leave the Vercel output directory unset; Nitro writes the deployment to `.vercel/output`. Do not set `.next` as the output directory.
+
+1. Create a Neon Postgres database and a **private** Vercel Blob store, then connect the Blob store to this Vercel project. Use separate Neon branches/databases for Production, Preview, and local development so test data stays isolated.
+2. Set `DATABASE_URL` to the Neon pooled connection string and run `npm run db:migrate` once to create the application tables.
+3. Create a Google OAuth web client. Add `https://your-production-domain/callback` as an authorized redirect URI. For Preview deployments, add their callback URLs too or use a separate OAuth client for previews.
+4. Add the following environment variables in Vercel:
+
+   - `DATABASE_URL`: Neon Postgres pooled connection string.
+   - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: credentials for the Google OAuth web client.
+   - `AUTH_SECRET`: a private signing key of at least 32 characters. Generate one with `openssl rand -base64 32`.
+   - `CQL_OWNER_EMAIL`: the Google account email that is allowed to initialize the workspace and become its owner.
+   - `VAULT_KEY`: a separate, private, base64-encoded 32-byte key for encrypted credentials. Generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`. Keep this value stable; rotating it requires migrating stored credentials.
+   - `APP_BASE_URL` (recommended): the public origin for that Vercel environment, for example `https://onboarding.example.com` in Production. Preview deployments need a matching callback URL and origin.
+   - `BLOB_READ_WRITE_TOKEN`: provided when connecting a Blob store that uses token authentication. New Vercel private Blob stores can use Vercel's OIDC integration instead.
+
+5. Deploy. Sign in with the account matching `CQL_OWNER_EMAIL` first to initialize the owner record. Google sign-in uses a signed, HTTP-only session cookie; uploaded documents use private Blob storage and continue to be served through the app's authorization checks.
+
+This setup creates an empty Neon database; it does not copy existing records from Cloudflare D1 or files from R2. Export and migrate those records/files before switching a live workspace to Vercel.
+
+For local Vercel development, link the Vercel project and run `vercel env pull .env.local`, then use `VERCEL=1 npm run dev` (PowerShell: `$env:VERCEL='1'; npm run dev`). Set `APP_BASE_URL=http://localhost:5173` locally and add `http://localhost:5173/callback` to the Google OAuth client's authorized redirect URIs. Point local development at a separate Neon branch/database. The regular `npm run dev` command remains the Cloudflare/Sites mock-auth preview.
+
+## Cloudflare Sites deployment
 
 The app uses Vinext and React on Cloudflare Workers. A hosted deployment needs a Cloudflare D1 database bound as `DB`, a private R2 bucket bound as `BUCKET`, and Sites-hosted authentication. Set `VAULT_KEY` as a secret in the hosting environment; it must decode from base64 to exactly 32 bytes for AES-GCM credential encryption. Keep this key private and do not rotate it without migrating existing encrypted credentials. The project’s hosting binding names are recorded in `.openai/hosting.json`.
 
