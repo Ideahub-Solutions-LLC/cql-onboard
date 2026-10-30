@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+const base='http://127.0.0.1:8787';
+async function request(path,{user='local_seedy',email='seedy@sites.test',body,method,origin=base}={}){const h={};if(user){h['oai-authenticated-user-id']=user;h['oai-authenticated-user-email']=email;}if(origin)h.Origin=origin;if(body&&!(body instanceof FormData))h['Content-Type']='application/json';const r=await fetch(base+'/api/'+path,{headers:h,method:method||(body?'POST':'GET'),body:body instanceof FormData?body:body?JSON.stringify(body):undefined});const text=await r.text();let data;try{data=JSON.parse(text)}catch{data=text}return {status:r.status,data};}
+let checks=0;function check(ok,msg){assert.ok(ok,msg);checks++;console.log('PASS '+msg);}
+check((await request('session',{user:null})).status===401,'anonymous access denied');
+check((await request('applications',{body:{},origin:'https://untrusted.example'})).status===403,'cross-origin writes denied');
+const session=(await request('session')).data;check(session.admin===true,'owner can administer');
+const client={user:'synthetic_client',email:'synthetic-client@example.test'};check((await request('session',client)).data.admin===false,'client has no team privileges');
+const a=(await request('applications',{...client,body:{data:{legalName:'SYNTHETIC QA CLIENT',password:'must-not-save'}}})).data;
+check(a.id&&a.data.password===undefined,'new draft saved without secrets in answer payload');
+check((await request('applications/'+a.id,{user:'unrelated',email:'other@example.test'})).status===403,'unrelated client cannot read application');
+check((await request('applications/'+a.id+'/team',{...client,body:{status:'launched'},method:'PUT'})).status===403,'client cannot update team checklist');
+check((await request('config',{...client,body:{brandName:'Unauthorized change'},method:'PUT'})).status===403,'client cannot change brand, rates, or team permissions');
+const incomplete=await request('applications/'+a.id+'/submit',{...client,body:{data:{},pricingVersion:session.config.pricingVersion}});check(incomplete.status===400,'incomplete submission blocked: '+JSON.stringify(incomplete));
+await request('applications/'+a.id+'/team',{body:{status:'draft',checklist:{},notes:'INTERNAL_ONLY'},method:'PUT'});
+check((await request('applications/'+a.id,client)).data.notes===undefined,'internal notes hidden from clients');
+const fd=new FormData();fd.append('file',new Blob(['first_name,email\nTest,test@example.test'],{type:'text/csv'}),'synthetic-contacts.csv');fd.append('category','Contacts');const f=await request('applications/'+a.id+'/files',{...client,body:fd});check(f.status===201,'file upload persisted');
+check((await request('files/'+f.data.id,client)).data.includes('first_name'),'uploaded file can be downloaded by its owner');
+check((await request('files/'+f.data.id,{user:'unrelated',email:'other@example.test'})).status===403,'unrelated client cannot download private files');
+const vault=await request('applications/'+a.id+'/secret',{...client,body:{password:'SYNTHETIC_TEST_VALUE'},method:'PUT'});check(vault.status===200,'password stored in encrypted vault');
+check((await request('applications/'+a.id+'/secret',client)).status===403,'client cannot reveal vault after storing');
+check((await request('applications/'+a.id+'/secret')).data.password==='SYNTHETIC_TEST_VALUE','authorized team can decrypt credential');
+const d={flowVersion:2,completedSteps:['0','1','2','3','4','5','6'],alreadyHaveAccount:true,signupDone:true,legalName:'SYNTHETIC QA CLIENT',contactName:'QA Test',contactEmail:'synthetic-client@example.test',contactPhone:'+15555550100',industry:'Other',address:'Test Street',city:'Test City',region:'CA',postalCode:'00000',representative:'QA Test',representativeEmail:'qa@example.test',campaign:'Synthetic test appointment reminders',consentMethod:'Test form',sampleMessage:'Test appointment. Reply STOP to opt out.',domain:'example.test',routingPhone:'+15555550100',calendarOwner:'qa@example.test',services:'Test services',leadGoal:'Test booking',brandType:'Registered business',country:'United States',taxId:'12-3456789',days:['Monday'],startTime:'09:00',endTime:'17:00',importMode:'Starting fresh',signature:'SYNTHETIC QA TEST',reviewAccuracy:true,reviewUsage:true,reviewAuthority:true,plan:'CQL Startup',aiBilling:'AI Pay-Per-Use'};
+const submit=await request('applications/'+a.id+'/submit',{...client,body:{data:d,pricingVersion:session.config.pricingVersion}});check(submit.status===200,'complete application submitted');
+const saved=(await request('applications/'+a.id,client)).data;check(saved.status==='submitted'&&saved.pricingSnapshot?.fees?.length===session.config.fees.length,'submission stores status and versioned pricing acknowledgment');
+check((await request('applications/'+a.id,{...client,body:{data:d},method:'PUT'})).status===409,'submitted client application protected from further edits');
+check((await request('applications/'+a.id+'/team',{body:{status:'launched',checklist:{}},method:'PUT'})).status===400,'launch blocked until checklist is resolved');
+await request('applications/'+a.id+'/secret',{method:'DELETE'});check((await request('applications/'+a.id+'/secret')).status===404,'credential can be removed after setup');
+await request('files/'+f.data.id,{method:'DELETE'});check((await request('files/'+f.data.id)).status===404,'removed attachment is no longer available');
+console.log(`${checks} checks passed. Local-only synthetic test application: ${a.id}`);

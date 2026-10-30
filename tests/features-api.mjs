@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import {onboardingTasks} from '../lib/onboarding.ts';
+const base='http://127.0.0.1:8787';let count=0;
+const owner={id:'local_seedy',email:'seedy@sites.test'},client={id:'feature_test_client',email:'feature-test@example.test'};
+async function api(path,who=owner,body,method){const r=await fetch(base+'/api/'+path,{method:method||(body?'POST':'GET'),headers:{'oai-authenticated-user-id':who.id,'oai-authenticated-user-email':who.email,Origin:base,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()};}
+const check=(name,value)=>{assert.ok(value,name);count++;console.log('PASS '+name);};
+const config=(await api('session')).data.config;
+check('client price catalog contains tiered customer prices',(await api('session',client)).data.config.fees.some(f=>f.name==='WhatsApp activation'&&f.rates.Business==='15.000000'));
+const requestedFeatures=['WhatsApp activation','Call recording'];
+const created=await api('applications',client,{data:{requestedFeatures}});check('client feature requests saved on application',created.status===201&&created.data.data.requestedFeatures.length===2);
+const id=created.data.id;
+check('unknown feature requests are rejected',(await api('applications/'+id,client,{data:{requestedFeatures:['Unlisted feature']},step:0},'PUT')).status===400);
+check('team sees client activation requests',(await api('applications/'+id)).data.data.requestedFeatures.includes('Call recording'));
+const d={flowVersion:2,completedSteps:['0','1','2','3','4','5','6'],signupId:'cql-business',signupDone:true,alreadyHaveAccount:false,requestedFeatures,legalName:'SYNTHETIC FEATURE TEST',contactName:'QA',contactEmail:client.email,contactPhone:'+15555550100',industry:'Other',address:'Test',city:'Test',region:'CA',postalCode:'00000',representative:'QA',representativeEmail:'qa@example.test',campaign:'Test reminders',consentMethod:'Test form',sampleMessage:'Test. Reply STOP to opt out.',domain:'example.test',routingPhone:'+15555550100',calendarOwner:'qa@example.test',services:'Test',leadGoal:'Test booking',brandType:'Registered business',country:'United States',taxId:'12-3456789',days:['Monday'],startTime:'09:00',endTime:'17:00',importMode:'Starting fresh',signature:'SYNTHETIC TEST',reviewAccuracy:true,reviewUsage:true,reviewAuthority:true};
+check('feature requests submit with complete onboarding',(await api('applications/'+id+'/submit',client,{data:d,pricingVersion:config.pricingVersion})).status===200);
+const submitted=(await api('applications/'+id)).data;
+check('pricing snapshot preserves tier and requested features',submitted.pricingSnapshot.pricingTier==='Business'&&submitted.pricingSnapshot.requestedFeatures.length===2&&submitted.pricingSnapshot.fees.find(f=>f.name==='Call recording').rates.Business==='0.003750');
+const names=['Review onboarding','Create CQL / GHL sub-account','Verify A2P documents','Submit A2P brand & campaign','Connect domain & publish site','Configure email & verify DNS','Provision phone number','Configure calendar & test booking','Import contacts & map fields','Build & test follow-up automation','Configure AI receptionist (if selected)','Confirm rates & billing','Client review & launch'];
+const checklist=Object.fromEntries(names.map(n=>[n,'Complete']));
+check('launch blocked until requested feature tasks are resolved',(await api('applications/'+id+'/team',owner,{status:'launched',checklist,notes:'SYNTHETIC TEST'},'PUT')).status===400);
+for(const f of requestedFeatures)checklist['Activate · '+f]='Complete';
+check('launch blocked until deferred intake work is resolved',(await api('applications/'+id+'/team',owner,{status:'launched',checklist,notes:'SYNTHETIC TEST'},'PUT')).status===400);
+for(const task of onboardingTasks(submitted.data))checklist[task]='Complete';
+check('resolved requested features permit checklist completion',(await api('applications/'+id+'/team',owner,{status:'launched',checklist,notes:'SYNTHETIC TEST'},'PUT')).status===200);
+check('submitted client cannot activate services through team API',(await api('applications/'+id+'/team',client,{status:'launched',checklist},'PUT')).status===403);
+console.log(`${count} feature API checks passed. Synthetic application: ${id}`);
