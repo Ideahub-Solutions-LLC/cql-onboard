@@ -19,6 +19,7 @@ The client screen uses a focused form and a single step navigator in the side me
 
 The client sequence is: 1. Your account; 2. Your business; 3. Your setup; 4. Review & send. Clients open signup in a modal popup and declare completion; existing-account holders continue directly. The shortest path asks for business name, services/offer, contact name, email, and phone. Client identities can prefill their own contact name/email. “Help me choose” defers technical choices to the setup specialist. “Choose my services” reveals only relevant preferences; clients can optionally supply business verification or calendar details now. Signature and the three final acknowledgments remain required.
 
+
 Deferred details appear in the review and become team “Follow up” checklist items. A submitted brief is not a launch-ready application or verified account. The team must resolve required setup work before marking the account launched. Existing answers are preserved; old eight-step draft progress is translated to the shorter flow when opened and saved. Past submitted snapshots stay intact.
 
 Signup completion is a client declaration, never payment verification. Closing the popup alone does not confirm signup. A separate signup window is available if embedding fails.
@@ -35,10 +36,39 @@ Clients can browse Pricing & features, select a tier for comparison, and request
 
 Submitted prices and signup choices are a snapshot. Past submissions retain the acknowledged rates and price-list file, even after updates. Blank rates explicitly require a quote. Signup links open the destinations configured by the team. This app does not process card payments, provision GHL sub-accounts, register A2P campaigns, publish client websites, import contacts into GHL, or activate automations. Those are explicit team checklist tasks. AI receptionist selections are setup instructions, not an active AI calling service.
 
-## Runtime
-Vinext / React on Cloudflare Workers; D1 binding DB; R2 binding BUCKET. Hosted authentication is provided by Sites. Runtime secret: VAULT_KEY. Never rotate this key without a data migration for stored credentials.
+## Run locally
 
-## Development
-Use the Sites skill helpers for install, build, source sync, and publishing. npm run dev serves the portable preview. npm run db:generate produces schema migrations. The production preview uses npm start.
+### Prerequisites
 
-npm test runs catalog, pricing, and short-intake unit checks, including legacy draft migration and conditional requirements. tests/catalog.mjs and tests/pricing.mjs check CSV parsing, catalog validation, exact customer rates, tier separation, and billing distinctions. tests/features-api.mjs checks request persistence, rate snapshots, and activation checklist prerequisites. npm run test:api runs all four API suites, including the essentials-only flow and launch follow-up prerequisites. Run it only against an isolated synthetic local database. tests/smoke.mjs, tests/catalog-api.mjs, tests/features-api.mjs, and tests/onboarding-api.mjs target only 127.0.0.1:8787 with synthetic records and identities. They expect the local database owner local_seedy and a synthetic VAULT_KEY in the local preview. Checks cover access control, CSRF, client isolation, files, encrypted credentials, sequential steps, settings conflicts, price-list access, version snapshots, submission locking, and launch prerequisites. Do not point them at production.
+- Node.js 22.13 or newer (the version in `package.json` is the minimum).
+- npm, included with Node.js.
+
+### Install and start
+
+From the project directory, install the locked dependencies and start the development preview:
+
+```sh
+npm ci
+npm run dev
+```
+
+Open the local URL printed in the terminal (normally <http://127.0.0.1:5173>). Keep the terminal open while using the app; press `Ctrl+C` to stop the server. To use another port, run Vite directly, for example `node ./node_modules/vite/bin/vite.js --config vite.config.ts --port 5174`.
+
+The preview runs the app with local Cloudflare Worker bindings and a local mock identity (`seedy@sites.test`). It is intended for development, not public access. The D1 database and R2 bucket are local preview resources; local data is kept in `.wrangler/` and should not be treated as production data. The encrypted credential feature also requires a `VAULT_KEY` runtime secret containing 32 bytes encoded as base64. Do not use a production key for local development.
+
+### Useful commands
+
+```sh
+npm run build       # Build the Cloudflare Workers output
+npm start            # Run the built app in the local Wrangler preview
+npm test             # Run catalog, pricing, and onboarding unit checks
+npm run db:generate  # Generate a Drizzle migration from db/schema.ts
+```
+
+Run `npm run build` before `npm start`. `npm run test:api` runs API integration checks against `127.0.0.1:8787` and an isolated synthetic local database; never point those tests at production.
+
+## Deploy/runtime requirements
+
+The app uses Vinext and React on Cloudflare Workers. A hosted deployment needs a Cloudflare D1 database bound as `DB`, a private R2 bucket bound as `BUCKET`, and Sites-hosted authentication. Set `VAULT_KEY` as a secret in the hosting environment; it must decode from base64 to exactly 32 bytes for AES-GCM credential encryption. Keep this key private and do not rotate it without migrating existing encrypted credentials. The project’s hosting binding names are recorded in `.openai/hosting.json`.
+
+For source sync and publishing in the managed Sites environment, use its Sites workflow. `npm run dev` is the portable local preview; `npm start` serves the locally built output through Wrangler.
