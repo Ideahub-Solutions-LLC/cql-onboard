@@ -13,7 +13,7 @@ A private, persistent client onboarding app for Core Quantum Leads.
 - CSV price imports with a preview and a choice to replace the menu or update matching services. Downloadable PDF, Excel, and CSV price-list documents can be uploaded and replaced separately.
 
 ## Operating the app
-The Site starts owner-private. Its first signed-in visitor becomes its application owner. Open it as the Site owner before granting anyone access. The owner may add team emails in Brand & settings; those accounts also need Site access. Create each client application with the exact email they use to sign in, grant that client Site viewer access, and copy their application link. No invitation or other email is sent by this app.
+The Site starts owner-private. Its first signed-in Site visitor becomes its application owner. Open it as the Site owner before granting anyone access. The owner may add team emails in Brand & settings; those accounts also need Site access. Clients can start their own browser-bound draft without an external sign-in. Team-created applications remain tied to the assigned client identity, and the team can copy each application link. No invitation or other email is sent by this app.
 
 The client screen uses a focused form and a single step navigator in the side menu. The menu is visible by default and can be shown or hidden with the header button; this display preference is remembered on the device. Completed steps show checkmarks and upcoming steps remain disabled until the current step is complete.
 
@@ -69,29 +69,24 @@ Run `npm run build` before `npm start`. `npm run test:api` runs API integration 
 
 ## Deploy to Vercel
 
-The Vercel build uses Vinext with Vite and Nitro. The included `vercel.json` selects Vercel's **Other** framework preset and runs `npm ci` followed by `npm run build`. Leave the Vercel output directory unset; Nitro writes the deployment to `.vercel/output`. Do not set `.next` as the output directory.
+The Vercel build uses Vinext with Vite and Nitro. The included `vercel.json` selects Vercel's **Other** framework preset and runs `npm ci` followed by `npm run build`. Leave the Vercel output directory unset; Nitro writes the deployment to `.vercel/output`. Do not set `.next` as the output directory. Vercel can serve client intake with guest sessions; team administration requires trusted Site identity headers and is available on the Cloudflare Sites deployment.
 
 1. Create a Neon Postgres database and a **private** Vercel Blob store, then connect the Blob store to this Vercel project. Use separate Neon branches/databases for Production, Preview, and local development so test data stays isolated.
 2. Set `DATABASE_URL` to the Neon pooled connection string and run `npm run db:migrate` once to create the application tables.
-3. Create a Google OAuth web client. Add `https://your-production-domain/callback` as an authorized redirect URI. For Preview deployments, add their callback URLs too or use a separate OAuth client for previews.
-4. Add the following environment variables in Vercel:
+3. Add the following environment variables in Vercel:
 
    - `DATABASE_URL`: Neon Postgres pooled connection string.
-   - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: credentials for the Google OAuth web client.
-   - `AUTH_SECRET`: a private signing key of at least 32 characters. Generate one with `openssl rand -base64 32`.
-   - `CQL_OWNER_EMAIL`: the Google account email that is allowed to initialize the workspace and become its owner.
-   - `VAULT_KEY`: a separate, private, base64-encoded 32-byte key for encrypted credentials. Generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`. Keep this value stable; rotating it requires migrating stored credentials.
-   - `APP_BASE_URL` (recommended): the public origin for that Vercel environment, for example `https://onboarding.example.com` in Production. Preview deployments need a matching callback URL and origin.
+   - `VAULT_KEY`: a private, base64-encoded 32-byte key for encrypted credentials and signed client-only draft sessions. Generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`. Keep this value stable; rotating it requires migrating stored credentials and will invalidate guest draft sessions.
    - `BLOB_READ_WRITE_TOKEN`: provided when connecting a Blob store that uses token authentication. New Vercel private Blob stores can use Vercel's OIDC integration instead.
 
-5. Deploy. Sign in with the account matching `CQL_OWNER_EMAIL` first to initialize the owner record. Google sign-in uses a signed, HTTP-only session cookie; uploaded documents use private Blob storage and continue to be served through the app's authorization checks.
+4. Deploy. Site-hosted identity initializes the team owner on first visit. Clients can begin a browser-bound draft without signing in; its signed, HTTP-only cookie can access only applications created by that browser. Uploaded documents use private Blob storage and continue to be served through the app's authorization checks.
 
 This setup creates an empty Neon database; it does not copy existing records from Cloudflare D1 or files from R2. Export and migrate those records/files before switching a live workspace to Vercel.
 
-For local Vercel development, link the Vercel project and run `vercel env pull .env.local`, then use `VERCEL=1 npm run dev` (PowerShell: `$env:VERCEL='1'; npm run dev`). Set `APP_BASE_URL=http://localhost:5173` locally and add `http://localhost:5173/callback` to the Google OAuth client's authorized redirect URIs. Point local development at a separate Neon branch/database. The regular `npm run dev` command remains the Cloudflare/Sites mock-auth preview.
+For local Vercel development, link the Vercel project and run `vercel env pull .env.local`, then use `VERCEL=1 npm run dev` (PowerShell: `$env:VERCEL='1'; npm run dev`). Point local development at a separate Neon branch/database and provide a local `VAULT_KEY`. The regular `npm run dev` command remains the Cloudflare/Sites local-identity preview.
 
 ## Cloudflare Sites deployment
 
-The app uses Vinext and React on Cloudflare Workers. A hosted deployment needs a Cloudflare D1 database bound as `DB`, a private R2 bucket bound as `BUCKET`, and Sites-hosted authentication. Set `VAULT_KEY` as a secret in the hosting environment; it must decode from base64 to exactly 32 bytes for AES-GCM credential encryption. Keep this key private and do not rotate it without migrating existing encrypted credentials. The project’s hosting binding names are recorded in `.openai/hosting.json`.
+The app uses Vinext and React on Cloudflare Workers. A hosted deployment needs a Cloudflare D1 database bound as `DB`, a private R2 bucket bound as `BUCKET`, and `VAULT_KEY` as a secret. It must decode from base64 to exactly 32 bytes. The key protects encrypted credentials and signs browser-bound anonymous client sessions. Keep it private and stable; rotating it requires migrating encrypted credentials and invalidates existing guest sessions. The project’s hosting binding names are recorded in `.openai/hosting.json`.
 
 For source sync and publishing in the managed Sites environment, use its Sites workflow. `npm run dev` is the portable local preview; `npm start` serves the locally built output through Wrangler.

@@ -1,18 +1,31 @@
 import { SignJWT, jwtVerify } from "jose";
 
-export type GoogleSessionUser = {
+export type OnboardingUser = {
   userId: string;
   email: string;
   displayName: string;
   fullName: string | null;
+  isAnonymous?: boolean;
 };
 
-function signingKey() {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret || new TextEncoder().encode(secret).length < 32) {
-    throw new Error("AUTH_SECRET must contain at least 32 characters.");
+const encoder = new TextEncoder();
+const guestCookie = (secure: boolean) => secure ? "__Host-cql-guest" : "cql_guest";
+
+async function guestSigningKey(encodedVaultKey: string): Promise<CryptoKey | null> {
+  try {
+    const raw = Uint8Array.from(atob(encodedVaultKey), (character) => character.charCodeAt(0));
+    if (raw.byteLength !== 32) return null;
+    const material = await crypto.subtle.importKey("raw", raw, "HKDF", false, ["deriveKey"]);
+    return await crypto.subtle.deriveKey(
+      { name: "HKDF", hash: "SHA-256", salt: encoder.encode("cql-onboarding-v1"), info: encoder.encode("guest-session-signing") },
+      material,
+      { name: "HMAC", hash: "SHA-256", length: 256 },
+      false,
+      ["sign", "verify"],
+    );
+  } catch {
+    return null;
   }
-  return new TextEncoder().encode(secret);
 }
 
 export function cookieValue(cookieHeader: string | null, name: string) {
@@ -26,58 +39,40 @@ export function cookieValue(cookieHeader: string | null, name: string) {
   }
 }
 
-export async function signAuthToken(payload: Record<string, unknown>, expiresIn: string) {
-  return new SignJWT(payload)
+export async function createGuestSession(encodedVaultKey: string, secure: boolean) {
+  const key = await guestSigningKey(encodedVaultKey);
+  if (!key) return null;
+  const id = crypto.randomUUID();
+  const token = await new SignJWT({ kind: "guest" })
     .setProtectedHeader({ alg: "HS256" })
+    .setSubject(id)
     .setIssuedAt()
-    .setExpirationTime(expiresIn)
-    .sign(signingKey());
+    .setExpirationTime("30d")
+    .sign(key);
+  const name = guestCookie(secure);
+  const cookie = `${name}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${secure ? "; Secure" : ""}`;
+  return {
+    cookie,
+    user: { userId: `guest:${id}`, email: "", displayName: "Client", fullName: null, isAnonymous: true } satisfies OnboardingUser,
+  };
 }
 
-export async function verifyAuthToken(token: string) {
-  const { payload } = await jwtVerify(token, signingKey(), { algorithms: ["HS256"] });
-  return payload;
-}
-
-export async function verifyGoogleSession(token: string): Promise<GoogleSessionUser | null> {
+export async function verifyGuestSession(token: string, encodedVaultKey: string): Promise<OnboardingUser | null> {
+  const key = await guestSigningKey(encodedVaultKey);
+  if (!key) return null;
   try {
-    const payload = await verifyAuthToken(token);
-    if (
-      payload.kind !== "session" ||
-      typeof payload.sub !== "string" ||
-      typeof payload.email !== "string" ||
-      typeof payload.name !== "string"
-    ) return null;
+    const { payload } = await jwtVerify(token, key, { algorithms: ["HS256"] });
+    if (payload.kind !== "guest" || typeof payload.sub !== "string") return null;
     return {
-      userId: `google:${payload.sub}`,
-      email: payload.email,
-      displayName: payload.name,
-      fullName: payload.name,
+      userId: `guest:${payload.sub}`,
+      email: "",
+      displayName: "Client",
+      fullName: null,
+      isAnonymous: true,
     };
   } catch {
     return null;
   }
 }
 
-export function sessionCookieName(secure: boolean) {
-  return secure ? "__Host-cql-session" : "cql_session";
-}
-
-export function oauthCookieName(secure: boolean) {
-  return secure ? "__Host-cql-oauth" : "cql_oauth";
-}
-
-export function cookieOptions(secure: boolean, maxAge: number) {
-  return `Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
-}
-
-export function safeReturnPath(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
-  try {
-    const url = new URL(value, "https://local.invalid");
-    if (url.origin !== "https://local.invalid" || ["/callback", "/signin-with-chatgpt", "/signout-with-chatgpt"].includes(url.pathname)) return "/";
-    return `${url.pathname}${url.search}${url.hash}`;
-  } catch {
-    return "/";
-  }
-}
+export function guestCookieName(secure: boolean) { return guestCookie(secure); }
