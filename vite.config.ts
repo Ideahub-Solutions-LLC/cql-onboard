@@ -8,7 +8,7 @@ import { connectorPreview } from "./scripts/vite/connector-preview-plugin.mjs";
 import { fileURLToPath } from "node:url";
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
-  "00000000-0000-4000-8000-000000000000";
+  "d400f966-8a9d-4e81-b106-f3e168158aaf";
 
 const { d1, r2 } = hostingConfig;
 const isVercel = process.env.VERCEL === "1" || process.env.VERCEL === "true";
