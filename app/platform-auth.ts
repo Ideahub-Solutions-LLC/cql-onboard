@@ -1,7 +1,7 @@
 // Server-only authentication. Never import this module into a client component.
 export const administratorEmail = 'chito@ideahubsolutionsinc.com';
-const passwordSalt = 'ce02c740764741bd1a8f511e0f32a631';
-const passwordHash = '941a89420fce7a8f580372399faab54685b32bfbf990ff778cdd688c434f354f';
+const defaultPasswordSalt = 'ce02c740764741bd1a8f511e0f32a631';
+const defaultPasswordHash = '941a89420fce7a8f580372399faab54685b32bfbf990ff778cdd688c434f354f';
 const lifetime = 8 * 60 * 60;
 const encoder = new TextEncoder();
 
@@ -9,7 +9,7 @@ export type AuthDatabase = {
   prepare(sql: string): {
     bind(...values: unknown[]): ReturnType<AuthDatabase['prepare']>;
     first<T>(): Promise<T | null>;
-    run(): Promise<unknown>;
+    run(): Promise<{meta?: {changes?: number}}>;
   };
 };
 
@@ -26,14 +26,40 @@ async function sessionId(req: Request) {
   return 'auth:session:' + hex(await crypto.subtle.digest('SHA-256', encoder.encode(token)));
 }
 
-export async function verifyAdministrator(email: unknown, password: unknown) {
-  if (typeof email !== 'string' || typeof password !== 'string' || password.length > 1024) return false;
+type AdministratorCredential = { salt: string; hash: string; version: string };
+async function administratorCredential(db: AuthDatabase): Promise<AdministratorCredential> {
+  const row = await db.prepare('SELECT value FROM settings WHERE id=?').bind('auth:administrator').first<{value: string}>();
+  if (!row) return { salt: defaultPasswordSalt, hash: defaultPasswordHash, version: 'default' };
+  const credential = JSON.parse(row.value) as AdministratorCredential;
+  if (!/^[a-f0-9]{32}$/.test(credential.salt) || !/^[a-f0-9]{64}$/.test(credential.hash) || typeof credential.version !== 'string') throw new Error('Administrator credential is invalid.');
+  return credential;
+}
+
+async function derivePassword(password: string, salt: string) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  // Keep the verifier compatible with the Workers runtime.
-  const derived = hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unhex(passwordSalt), iterations: 100000 }, key, 256));
+  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unhex(salt), iterations: 100000 }, key, 256));
+}
+
+export async function verifyAdministrator(email: unknown, password: unknown, db: AuthDatabase) {
+  if (typeof email !== 'string' || typeof password !== 'string' || password.length > 1024) return null;
+  const credential = await administratorCredential(db);
+  const derived = await derivePassword(password, credential.salt);
   let difference = 0;
-  for (let i = 0; i < passwordHash.length; i++) difference |= derived.charCodeAt(i) ^ passwordHash.charCodeAt(i);
-  return difference === 0 && email.trim().toLowerCase() === administratorEmail;
+  for (let i = 0; i < credential.hash.length; i++) difference |= derived.charCodeAt(i) ^ credential.hash.charCodeAt(i);
+  return difference === 0 && email.trim().toLowerCase() === administratorEmail ? credential.version : null;
+}
+
+export async function changeAdministratorPassword(db: AuthDatabase, currentPassword: unknown, newPassword: unknown, confirmation: unknown) {
+  if (!await allowLoginAttempt(db)) throw Object.assign(new Error('Too many password attempts. Try again in 15 minutes.'), { status: 429 });
+  if (!await verifyAdministrator(administratorEmail, currentPassword, db)) throw Object.assign(new Error('Current password is incorrect.'), { status: 400 });
+  if (typeof newPassword !== 'string' || newPassword.length < 12 || newPassword.length > 1024) throw Object.assign(new Error('Use a new password with 12 to 1,024 characters.'), { status: 400 });
+  if (newPassword !== confirmation) throw Object.assign(new Error('New passwords do not match.'), { status: 400 });
+  if (newPassword === currentPassword) throw Object.assign(new Error('Choose a password different from your current password.'), { status: 400 });
+  const salt = hex(crypto.getRandomValues(new Uint8Array(16)).buffer);
+  const credential = { salt, hash: await derivePassword(newPassword, salt), version: crypto.randomUUID() };
+  await db.prepare('INSERT INTO settings (id,value) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').bind('auth:administrator', JSON.stringify(credential)).run();
+  // Sessions are also tied to the credential version, closing concurrent login races.
+  await db.prepare("DELETE FROM settings WHERE id LIKE 'auth:session:%'").run();
 }
 
 export async function allowLoginAttempt(db: AuthDatabase, now = Date.now()) {
@@ -44,12 +70,14 @@ export async function allowLoginAttempt(db: AuthDatabase, now = Date.now()) {
   return Number(row?.value) <= 20;
 }
 
-export async function createAdministratorSession(req: Request, db: AuthDatabase) {
+export async function createAdministratorSession(req: Request, db: AuthDatabase, version?: string) {
+  const credential = await administratorCredential(db);
+  if (version && version !== credential.version) throw Object.assign(new Error('Password changed. Please sign in again.'), {status: 401});
   const token = hex(crypto.getRandomValues(new Uint8Array(32)).buffer);
   const id = 'auth:session:' + hex(await crypto.subtle.digest('SHA-256', encoder.encode(token)));
   const now = Math.floor(Date.now() / 1000);
-  await db.prepare("DELETE FROM settings WHERE id LIKE 'auth:session:%' AND CAST(value AS INTEGER) <= ?").bind(now).run();
-  await db.prepare('INSERT INTO settings (id,value) VALUES (?,?)').bind(id, String(now + lifetime)).run();
+  await db.prepare("DELETE FROM settings WHERE id LIKE 'auth:session:%' AND value <= ?").bind(String(now).padStart(16, '0') + ':').run();
+  await db.prepare('INSERT INTO settings (id,value) VALUES (?,?)').bind(id, String(now + lifetime).padStart(16, '0') + ':' + credential.version).run();
   return sessionCookie(req, token, lifetime);
 }
 
@@ -57,7 +85,9 @@ export async function getPlatformUser(req: Request, db: AuthDatabase) {
   const id = await sessionId(req);
   if (!id) return null;
   const row = await db.prepare('SELECT value FROM settings WHERE id=?').bind(id).first<{value: string}>();
-  if (!row || Number(row.value) <= Date.now() / 1000) return null;
+  if (!row) return null;
+  const [expiry, version] = row.value.split(':');
+  if (!version || Number(expiry) <= Date.now() / 1000 || version !== (await administratorCredential(db)).version) return null;
   return { userId: 'administrator:' + administratorEmail, email: administratorEmail, displayName: 'Administrator', fullName: 'Administrator', isAnonymous: false };
 }
 

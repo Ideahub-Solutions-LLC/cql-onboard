@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { allowLoginAttempt, verifyAdministrator, createAdministratorSession, getPlatformUser, endAdministratorSession } from '../app/platform-auth.ts';
+import { ensureApplicationSchema } from '../lib/database-schema.ts';
+import { allowLoginAttempt, verifyAdministrator, createAdministratorSession, getPlatformUser, endAdministratorSession, changeAdministratorPassword } from '../app/platform-auth.ts';
 
 const sqlite = new DatabaseSync(':memory:');
-sqlite.exec('CREATE TABLE settings (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
-const db = { prepare(sql) { const statement = sqlite.prepare(sql); let values = []; return { bind(...args) { values = args; return this; }, async run() { return statement.run(...values); }, async first() { return statement.get(...values) ?? null; } }; } };
+
+const db = { prepare(sql) { const statement = sqlite.prepare(sql); let values = []; return { bind(...args) { values = args; return this; }, async run() { return {meta:{changes:Number(statement.run(...values).changes)}}; }, async first() { return statement.get(...values) ?? null; } }; } };
+await Promise.all([ensureApplicationSchema(db), ensureApplicationSchema(db)]);
+sqlite.exec("INSERT INTO settings (id,value) VALUES ('config','{\"brandName\":\"CQL\"}'),('owner','original-owner')");
 const request = (url = 'https://example.test/api/session', cookie = '') => new Request(url, { headers: { cookie } });
-assert.equal(await verifyAdministrator('chito@ideahubsolutionsinc.com', 'incorrect'), false);
-assert.equal(await verifyAdministrator(null, {}), false);
+assert.equal(await verifyAdministrator('chito@ideahubsolutionsinc.com', 'incorrect', db), null);
+assert.equal(await verifyAdministrator(null, {}, db), null);
 if (process.env.ADMIN_TEST_PASSWORD) {
-  assert.equal(await verifyAdministrator('CHITO@IDEAHUBSOLUTIONSINC.COM', process.env.ADMIN_TEST_PASSWORD), true);
-  assert.equal(await verifyAdministrator('other@example.test', process.env.ADMIN_TEST_PASSWORD), false);
+  assert.equal(await verifyAdministrator('CHITO@IDEAHUBSOLUTIONSINC.COM', process.env.ADMIN_TEST_PASSWORD, db), 'default');
+  assert.equal(await verifyAdministrator('other@example.test', process.env.ADMIN_TEST_PASSWORD, db), null);
 }
 assert.equal(await getPlatformUser(new Request('https://example.test', { headers: { 'oai-authenticated-user-id': 'owner', 'oai-authenticated-user-email': 'chito@ideahubsolutionsinc.com' } }), db), null);
 const cookie = await createAdministratorSession(request(), db);
@@ -31,5 +34,25 @@ for (let i = 0; i < 20; i++) assert.equal(await allowLoginAttempt(db, 1800000), 
 assert.equal(await allowLoginAttempt(db, 1800000), false);
 assert.equal(await allowLoginAttempt(db, 2700000), true);
 assert.equal(sqlite.prepare("SELECT count(*) AS n FROM settings WHERE id LIKE 'auth:attempt:%'").get().n, 1);
+if (process.env.ADMIN_TEST_PASSWORD) {
+  const oldCookie = (await createAdministratorSession(request(), db)).split(';')[0];
+  const replacement = 'Synthetic replacement password 123!';
+  await assert.rejects(changeAdministratorPassword(db, 'wrong', replacement, replacement), /Current password/);
+  await assert.rejects(changeAdministratorPassword(db, process.env.ADMIN_TEST_PASSWORD, 'short', 'short'), /12 to/);
+  await assert.rejects(changeAdministratorPassword(db, process.env.ADMIN_TEST_PASSWORD, replacement, 'mismatch'), /do not match/);
+  await changeAdministratorPassword(db, process.env.ADMIN_TEST_PASSWORD, replacement, replacement);
+  assert.equal(await verifyAdministrator('chito@ideahubsolutionsinc.com', process.env.ADMIN_TEST_PASSWORD, db), null);
+  assert.ok(await verifyAdministrator('chito@ideahubsolutionsinc.com', replacement, db));
+  assert.equal(await getPlatformUser(request(undefined, oldCookie), db), null);
+  await assert.rejects(createAdministratorSession(request(), db, 'default'), /Password changed/);
+  const changedCookie = (await createAdministratorSession(request(), db)).split(';')[0];
+  assert.ok(await getPlatformUser(request(undefined, changedCookie), db));
+  const credential = sqlite.prepare("SELECT value FROM settings WHERE id='auth:administrator'").get().value;
+  assert.ok(!credential.includes(replacement));
+  await ensureApplicationSchema(db);
+  assert.ok(await verifyAdministrator('chito@ideahubsolutionsinc.com', replacement, db));
+  assert.equal(sqlite.prepare("SELECT value FROM settings WHERE id='owner'").get().value, 'original-owner');
+  console.log('PASS fresh database setup, current-password checks, password change, default password retirement, session revocation, concurrent-login rejection, and credential persistence');
+}
 sqlite.close();
 console.log('PASS platform authentication: credentials, header bypass protection, session cookies, token hashing, tampering, expiration, revocation, and shared rate limits');

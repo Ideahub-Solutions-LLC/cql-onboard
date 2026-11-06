@@ -1,8 +1,9 @@
 import { env } from 'cloudflare:workers';
-import { allowLoginAttempt, verifyAdministrator, createAdministratorSession, endAdministratorSession, getPlatformUser } from '../../platform-auth';
+import { allowLoginAttempt, changeAdministratorPassword, verifyAdministrator, createAdministratorSession, endAdministratorSession, getPlatformUser } from '../../platform-auth';
 import { defaultConfig, initialData, taskNames, steps, unlockedStep, normalizeOnboarding, submissionErrors, onboardingTasks } from '../../../lib/shared';
 import { applicationTasks } from '../../../lib/pricing';
 import { catalogConfig, validateSignupOptions, validateFees } from '../../../lib/catalog';
+import { ensureApplicationSchema } from '../../../lib/database-schema';
 export const dynamic='force-dynamic';
 const json=(data:any,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 function fail(message:string,status=400):never{throw Object.assign(new Error(message),{status});}
@@ -11,14 +12,16 @@ const clean=(d:any)=>{if(!d||typeof d!=='object'||Array.isArray(d))fail('Invalid
 const parseRow=(r:any)=>({...r,data:JSON.parse(r.data),checklist:JSON.parse(r.checklist||'{}'),pricingSnapshot:r.pricing_snapshot?JSON.parse(r.pricing_snapshot):null});
 async function handler(req:Request){try{
  const path=new URL(req.url).pathname.slice(5).split('/').filter(Boolean);const id=path[1];
- const db=env.DB!;if(!db)return json({error:'Storage is not configured.'},503);
+ const db=env.DB!;if(!db)return json({error:'The platform database is not connected. Please contact your administrator.'},503);
  if(req.method!=='GET'){const origin=req.headers.get('origin');if(!origin||origin!==new URL(req.url).origin)return json({error:'Invalid request origin.'},403);}
+ await ensureApplicationSchema(db);
  if(path.length===2&&path[0]==='auth'&&path[1]==='login'&&req.method==='POST'){
   if(!await allowLoginAttempt(db))return json({error:'Too many sign-in attempts. Try again in 15 minutes.'},429);
   if(Number(req.headers.get('content-length')||0)>4096)return json({error:'Invalid sign-in request.'},400);
   let credentials:any;try{credentials=await req.json();}catch{return json({error:'Invalid sign-in request.'},400);}
-  if(!await verifyAdministrator(credentials?.email,credentials?.password))return json({error:'Email or password is incorrect.'},401);
-  const cookie=await createAdministratorSession(req,db);
+  const version=await verifyAdministrator(credentials?.email,credentials?.password,db);
+  if(!version)return json({error:'Email or password is incorrect.'},401);
+  const cookie=await createAdministratorSession(req,db,version);
   const response=json({signedIn:true});response.headers.set('Set-Cookie',cookie);return response;
  }
  if(path.length===2&&path[0]==='auth'&&path[1]==='logout'&&req.method==='POST'){
@@ -26,6 +29,10 @@ async function handler(req:Request){try{
  }
  const user=await getPlatformUser(req,db);
  if(!user)return json({error:'Please sign in to continue.'},401);
+ if(path.length===2&&path[0]==='auth'&&path[1]==='password'&&req.method==='POST'){
+  const body:any=await req.json();await changeAdministratorPassword(db,body.currentPassword,body.newPassword,body.confirmPassword);
+  const cookie=await endAdministratorSession(req,db);const response=json({changed:true});response.headers.set('Set-Cookie',cookie);return response;
+ }
  const cfgRow=await db.prepare('SELECT value FROM settings WHERE id = ?').bind('config').first<{value:string}>();
  const config=catalogConfig({...defaultConfig,...catalogConfig(cfgRow?JSON.parse(cfgRow.value):{})});
  const admin=true;
@@ -86,5 +93,5 @@ async function handler(req:Request){try{
  }
  if(path[0]==='files'&&id){const file:any=await db.prepare('SELECT * FROM attachments WHERE id=?').bind(id).first();if(!file)fail('File not found',404);const a=await getApp(file.application_id);if(req.method==='GET'){const object=await env.BUCKET!.get(file.object_key);if(!object)fail('File not found',404);return new Response(object.body,{headers:{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename="${file.name}"`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});}if(req.method==='DELETE'){assertEdit(a);await env.BUCKET!.delete(file.object_key);await db.prepare('DELETE FROM attachments WHERE id=?').bind(id).run();return json({deleted:true});}}
  return json({error:'Not found'},404);
- }catch(e:any){return json({error:e.status?e.message:'We couldn’t complete that request. Please try again.'},e.status||500);}}
+ }catch(e:any){if(!e.status)console.error('Platform API failure',{route:new URL(req.url).pathname,name:e.name,code:e.code,message:e.message});return json({error:e.status?e.message:'We couldn’t complete that request. Please try again.'},e.status||500);}}
 export const GET=handler,POST=handler,PUT=handler,DELETE=handler;
