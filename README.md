@@ -6,14 +6,16 @@ A private, persistent client onboarding app for Core Quantum Leads.
 - Four-step client intake: account, business essentials, setup choices, and review. Clients can provide five core business/contact details, choose specialist-led setup, and send a brief without completing every launch detail. Conditional preferences, draft saving, required-field checks, and client-specific applications are included.
 - Optional A2P details and uploads, domain/email, phone and calendar preferences, contact uploads, follow-up and AI requests, and pricing acknowledgment. Unfinished setup discovery becomes explicit team follow-up checklist work.
 - D1-backed records and private R2 attachments, with authorization on each API operation.
-- Existing domain credentials remain in the AES-GCM vault for authorized team access and deletion. New clients arrange access with their specialist after intake. VAULT_KEY is a 32-byte base64 runtime secret, kept out of source and form exports.
+- Existing domain credentials remain in the AES-GCM vault for authorized team access and deletion. The administrator arranges client access with a specialist. VAULT_KEY is a 32-byte base64 runtime secret, kept out of source and form exports.
 - Team workspace with application states, internal notes, file downloads, versioned rate snapshots, and a launch checklist.
-- Editable logo, brand color, support address, staff allowlist, signup options, and usage menu.
+- Editable logo, brand color, support address, signup options, and usage menu.
 - Add, edit, hide, reorder, or delete signup options without rebuilding. Each option has a name, description, badge, button text, and HTTPS destination.
 - CSV price imports with a preview and a choice to replace the menu or update matching services. Downloadable PDF, Excel, and CSV price-list documents can be uploaded and replaced separately.
 
 ## Operating the app
-The Site starts owner-private. Its first signed-in Site visitor becomes its application owner. Open it as the Site owner before granting anyone access. The owner may add team emails in Brand & settings; those accounts also need Site access. Clients can start their own browser-bound draft without an external sign-in. Team-created applications remain tied to the assigned client identity, and the team can copy each application link. No invitation or other email is sent by this app.
+The platform requires its own email/password sign-in before exposing applications, settings, files, or pricing. The configured administrator is `chito@ideahubsolutionsinc.com`. Its password is stored only as a salted PBKDF2 verifier in the server code; the plaintext password is not included in the repository or browser bundle. Sign-in opens the team dashboard. Sign out revokes the session immediately, and sessions expire after eight hours. Login attempts are limited to 20 per 15-minute window across the account.
+
+Authentication uses the existing settings table for hashed session tokens and login limits, so no authentication provider, hosting identity, extra runtime secret, or database migration is needed on an existing database. HTTPS deployments use secure HTTP-only cookies. Existing hosting identities, guest cookies, owner records, and team email allowlists do not grant access. This version provisions only the requested administrator. Client records can still be created and managed by the administrator; a client contact email or application link does not create a client sign-in account. Existing application data is preserved.
 
 The client screen uses a focused form and a single step navigator in the side menu. The menu is visible by default and can be shown or hidden with the header button; this display preference is remembered on the device. Completed steps show checkmarks and upcoming steps remain disabled until the current step is complete.
 
@@ -49,12 +51,13 @@ From the project directory, install the locked dependencies and start the develo
 
 ```sh
 npm ci
+npm run db:migrate:local
 npm run dev
 ```
 
 Open the local URL printed in the terminal (normally <http://127.0.0.1:5173>). Keep the terminal open while using the app; press `Ctrl+C` to stop the server. To use another port, run Vite directly, for example `node ./node_modules/vite/bin/vite.js --config vite.config.ts --port 5174`.
 
-The preview runs the app with local Cloudflare Worker bindings and a local mock identity (`seedy@sites.test`). It is intended for development, not public access. The D1 database and R2 bucket are local preview resources; local data is kept in `.wrangler/` and should not be treated as production data. The encrypted credential feature also requires a `VAULT_KEY` runtime secret containing 32 bytes encoded as base64. Do not use a production key for local development.
+The preview runs the app with local Cloudflare Worker bindings and the same administrator sign-in as production. It is intended for development, not public access. The D1 database and R2 bucket are local preview resources; local data is kept in `.wrangler/` and should not be treated as production data. The encrypted credential feature also requires a `VAULT_KEY` runtime secret containing 32 bytes encoded as base64. Do not use a production key for local development.
 
 ### Useful commands
 
@@ -65,21 +68,21 @@ npm test             # Run catalog, pricing, and onboarding unit checks
 npm run db:generate  # Generate a Cloudflare D1 migration from db/schema.ts
 ```
 
-Run `npm run build` before `npm start`. `npm run test:api` runs API integration checks against `127.0.0.1:8787` and an isolated synthetic local database; never point those tests at production.
+Run `npm run build` before `npm start`. `npm run test:api` checks sign-in and API protection against `127.0.0.1:8787` (override with `TEST_BASE_URL`). Provide `ADMIN_TEST_PASSWORD` in your test process to include successful login and logout checks. Use a local test database only. The older smoke/catalog/features/onboarding API files describe the retired hosting-identity and guest access model and are not part of the current API suite.
 
 ## Deploy to Vercel
 
-The Vercel build uses Vinext with Vite and Nitro. The included `vercel.json` selects Vercel's **Other** framework preset and runs `npm ci` followed by `npm run build`. Leave the Vercel output directory unset; Nitro writes the deployment to `.vercel/output`. Do not set `.next` as the output directory. Vercel can serve client intake with guest sessions; team administration requires trusted Site identity headers and is available on the Cloudflare Sites deployment.
+The Vercel build uses Vinext with Vite and Nitro. The included `vercel.json` selects Vercel's **Other** framework preset and runs `npm ci` followed by `npm run build`. Leave the Vercel output directory unset; Nitro writes the deployment to `.vercel/output`. Do not set `.next` as the output directory. Vercel and Cloudflare both use the platform’s own administrator sign-in.
 
 1. Create a Neon Postgres database and a **private** Vercel Blob store, then connect the Blob store to this Vercel project. Use separate Neon branches/databases for Production, Preview, and local development so test data stays isolated.
 2. Set `DATABASE_URL` to the Neon pooled connection string and run `npm run db:migrate` once to create the application tables.
 3. Add the following environment variables in Vercel:
 
    - `DATABASE_URL`: Neon Postgres pooled connection string.
-   - `VAULT_KEY`: a private, base64-encoded 32-byte key for encrypted credentials and signed client-only draft sessions. Generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`. Keep this value stable; rotating it requires migrating stored credentials and will invalidate guest draft sessions.
+   - `VAULT_KEY`: a private, base64-encoded 32-byte key for encrypted domain credentials. Generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`. Keep this value stable; rotating it requires migrating stored credentials.
    - `BLOB_READ_WRITE_TOKEN`: provided when connecting a Blob store that uses token authentication. New Vercel private Blob stores can use Vercel's OIDC integration instead.
 
-4. Deploy. Site-hosted identity initializes the team owner on first visit. Clients can begin a browser-bound draft without signing in; its signed, HTTP-only cookie can access only applications created by that browser. Uploaded documents use private Blob storage and continue to be served through the app's authorization checks.
+4. Deploy and sign in with the configured administrator credentials. Uploaded documents use private Blob storage and continue to be served through the app’s authorization checks.
 
 This setup creates an empty Neon database; it does not copy existing records from Cloudflare D1 or files from R2. Export and migrate those records/files before switching a live workspace to Vercel.
 
@@ -87,6 +90,6 @@ For local Vercel development, link the Vercel project and run `vercel env pull .
 
 ## Cloudflare Sites deployment
 
-The app uses Vinext and React on Cloudflare Workers. A hosted deployment needs a Cloudflare D1 database bound as `DB`, a private R2 bucket bound as `BUCKET`, and `VAULT_KEY` as a secret. It must decode from base64 to exactly 32 bytes. The key protects encrypted credentials and signs browser-bound anonymous client sessions. Keep it private and stable; rotating it requires migrating encrypted credentials and invalidates existing guest sessions. The project’s hosting binding names are recorded in `.openai/hosting.json`.
+The app uses Vinext and React on Cloudflare Workers. A hosted deployment needs a Cloudflare D1 database bound as `DB`, a private R2 bucket bound as `BUCKET`, and `VAULT_KEY` as a secret. It must decode from base64 to exactly 32 bytes. The key protects encrypted domain credentials. Keep it private and stable; rotating it requires migrating encrypted credentials. The project’s hosting binding names are recorded in `.openai/hosting.json`.
 
 For source sync and publishing in the managed Sites environment, use its Sites workflow. `npm run dev` is the portable local preview; `npm start` serves the locally built output through Wrangler.

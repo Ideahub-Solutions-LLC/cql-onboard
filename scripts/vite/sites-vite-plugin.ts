@@ -47,7 +47,7 @@ export function sites({ mockAuth = true } = {}): Plugin {
         let url: URL;
         try {
           authority = new URL(
-            `${secure ? "https" : "http"}://${request.headers.host}`,
+            `${(request.socket as { encrypted?: boolean }).encrypted ? "https" : "http"}://${request.headers.host}`,
           );
           url = new URL(request.url ?? "/", authority);
         } catch {
