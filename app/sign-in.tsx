@@ -1,16 +1,17 @@
 'use client';
 
 import { useState } from 'react';
+import type { LoginPrefill } from '../lib/client-login-details';
 
 import { ArrowRight, Eye, EyeOff, LockKeyhole } from 'lucide-react';
 
 
 
-export default function SignIn({ onSignIn, initialError = '' }: { onSignIn: () => Promise<void>; initialError?: string }) {
+export default function SignIn({ onSignIn, initialError = '', initialLogin }: { onSignIn: () => Promise<void>; initialError?: string; initialLogin?: LoginPrefill }) {
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initialLogin?.email || '');
 
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState(initialLogin?.password || '');
 
   const [visible, setVisible] = useState(false);
 

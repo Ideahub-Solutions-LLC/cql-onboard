@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { pbkdf2Sync } from 'node:crypto';
 import { build } from 'esbuild';
-import { clientLoginText } from '../lib/client-login-details.ts';
+import { clientLoginText, readLoginLink } from '../lib/client-login-details.ts';
 import { createAdministratorSession } from '../app/platform-auth.ts';
 
 // Exercise the real API handler with an isolated database and private file store.
@@ -43,7 +44,18 @@ const accessForCopy = (await api(`applications/${alpha.data.id}/client-access`, 
 const loginText = clientLoginText('https://example.test', alpha.data.id, accessForCopy, {email: alphaEmail, password: temporary, version: alpha.data.clientCredentialVersion});
 assert.ok(loginText.includes('Temporary password: ' + temporary));
 assert.ok(loginText.includes('Email: ' + alphaEmail));
-assert.ok(!loginText.split('\n')[0].includes(temporary), 'password is never embedded in the URL');
+const copiedUrl = new URL(loginText.split('\n')[0].slice('Client application: '.length));
+assert.equal(copiedUrl.searchParams.get('application'), alpha.data.id);
+assert.equal(copiedUrl.searchParams.has('temporaryPassword'), false, 'credentials are not sent as server query parameters');
+assert.deepEqual(readLoginLink(copiedUrl.href).prefill, {email: alphaEmail, password: temporary});
+assert.equal(readLoginLink(copiedUrl.href).cleanUrl, '/?application=' + alpha.data.id);
+const complexPassword = 'Temporary + & # ? = / % 😀 password';
+const complexText = clientLoginText(base, alpha.data.id, accessForCopy, {email: alphaEmail, password: complexPassword, version: alpha.data.clientCredentialVersion});
+assert.equal(readLoginLink(complexText.split('\n')[0].slice('Client application: '.length)).prefill.password, complexPassword);
+assert.equal(readLoginLink(base + '/?application=keep#email=invalid&temporaryPassword=secret&section=help').cleanUrl, '/?application=keep#section=help');
+assert.deepEqual(readLoginLink(base + '/#email=invalid&temporaryPassword=secret').prefill, {email: '', password: ''});
+assert.equal(readLoginLink(base + '/#section=help').hasCredentials, false);
+assert.equal(readLoginLink(base + '/#email=alpha%40example.test&temporaryPassword=' + 'x'.repeat(1025)).prefill.password, '');
 assert.throws(() => clientLoginText(base, alpha.data.id, accessForCopy), /Reset the client password/);
 assert.throws(() => clientLoginText(base, alpha.data.id, accessForCopy, {email: alphaEmail, password: temporary, version: 'stale'}), /Reset the client password/);
 assert.equal((await api('applications', {cookie: admin, body: {assignedEmail: 'missing-password@example.test', data: {legalName: 'Invalid'}}})).status, 400);
@@ -66,6 +78,8 @@ assert.ok(alphaCookie);
 assert.equal((await api('session', {cookie: alphaCookie})).data.mustChangePassword, false);
 const permanentAccess = (await api(`applications/${alpha.data.id}/client-access`, {cookie: admin})).data;
 assert.ok(!clientLoginText(base, alpha.data.id, permanentAccess, {email: alphaEmail, password: temporary, version: alpha.data.clientCredentialVersion}).includes(temporary), 'a changed temporary password is never copied again');
+const permanentText = clientLoginText(base, alpha.data.id, permanentAccess);
+assert.deepEqual(readLoginLink(permanentText.split('\n')[0].slice('Client application: '.length)).prefill, {email: alphaEmail, password: ''});
 const betaTemporary = await login(betaEmail, temporary);
 await api('auth/password', {cookie: betaTemporary.cookie, body: {currentPassword: temporary, newPassword: permanent, confirmPassword: permanent}});
 const betaCookie = (await login(betaEmail, permanent)).cookie;
@@ -115,6 +129,9 @@ assert.equal((await api(`applications/${alpha.data.id}/client-access`, {cookie: 
 assert.equal((await api('session', {cookie: alphaCookie})).status, 401);
 assert.equal((await api('session', {cookie: betaCookie})).status, 200, 'one client reset does not invalidate another account');
 assert.equal((await api('session', {cookie: admin})).status, 200);
+const resetAccess = (await api(`applications/${alpha.data.id}/client-access`, {cookie: admin})).data;
+assert.throws(() => clientLoginText(base, alpha.data.id, resetAccess, {email: alphaEmail, password: temporary, version: alpha.data.clientCredentialVersion}), /Reset the client password/);
+assert.equal((await login(alphaEmail, temporary)).status, 401, 'a copied old temporary password cannot survive a reset');
 assert.equal((await login(alphaEmail, permanent)).status, 401);
 const resetSession = await login(alphaEmail, resetPassword);
 assert.equal((await api('session', {cookie: resetSession.cookie})).data.mustChangePassword, true);
@@ -141,5 +158,26 @@ sqlite.exec("DELETE FROM settings WHERE id LIKE 'auth:attempt:%'");
 for (let i = 0; i < 20; i++) assert.equal((await login(alphaEmail, 'incorrect')).status, 401);
 assert.equal((await login(alphaEmail, changedAgain)).status, 429);
 assert.equal((await login(betaEmail, permanent)).status, 200, 'client rate limits do not lock other accounts');
+
+// Seed only this disposable database with a known administrator password.
+const adminEmail = 'chito@ideahubsolutionsinc.com';
+const adminPassword = 'Synthetic administrator password 123!';
+const nextAdminPassword = 'Replacement administrator password 456!';
+const salt = '0123456789abcdef0123456789abcdef';
+sqlite.prepare('INSERT INTO settings (id,value) VALUES (?,?)').run('auth:administrator', JSON.stringify({salt, hash: pbkdf2Sync(adminPassword, Buffer.from(salt, 'hex'), 100000, 32, 'sha256').toString('hex'), version: 'default'}));
+const otherAdmin = (await login(adminEmail, adminPassword)).cookie;
+assert.ok(otherAdmin);
+assert.equal((await api('auth/password', {cookie: admin, body: {currentPassword: 'wrong', newPassword: nextAdminPassword, confirmPassword: nextAdminPassword}})).status, 400);
+assert.equal((await api('auth/password', {cookie: admin, body: {currentPassword: adminPassword, newPassword: 'short', confirmPassword: 'short'}})).status, 400);
+assert.equal((await api('auth/password', {cookie: admin, body: {currentPassword: adminPassword, newPassword: nextAdminPassword, confirmPassword: 'mismatch'}})).status, 400);
+assert.equal((await api('auth/password', {cookie: admin, body: {currentPassword: adminPassword, newPassword: nextAdminPassword, confirmPassword: nextAdminPassword}})).status, 200);
+assert.equal((await api('session', {cookie: admin})).status, 401);
+assert.equal((await api('session', {cookie: otherAdmin})).status, 401);
+assert.equal((await api('session', {cookie: betaCookie})).status, 200, 'administrator password changes preserve client sessions');
+assert.equal((await login(adminEmail, adminPassword)).status, 401);
+const changedAdmin = await login(adminEmail, nextAdminPassword);
+assert.equal(changedAdmin.status, 200);
+assert.equal((await api('session', {cookie: changedAdmin.cookie})).data.admin, true);
+assert.ok(!sqlite.prepare("SELECT value FROM settings WHERE id='auth:administrator'").get().value.includes(nextAdminPassword));
 sqlite.close(); delete globalThis.__cqlTestEnv;
-console.log('PASS client API: provisioning, first-login gate, password change/reset, account isolation, private files/notes, draft resume, existing applications, credential hashing, CSRF, and separate login limits');
+console.log('PASS account API: client provisioning, first-login gate, password change/reset, isolation, private files/notes, draft resume, existing applications, credential hashing, CSRF, login limits, administrator password changes/session revocation, and copied-link autofill');
