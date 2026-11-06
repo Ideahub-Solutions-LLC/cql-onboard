@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { pbkdf2Sync } from 'node:crypto';
 import { build } from 'esbuild';
-import { clientLoginText, readLoginLink } from '../lib/client-login-details.ts';
+import { clientLoginText, clientLoginUrl, readLoginLink } from '../lib/client-login-details.ts';
 import { createAdministratorSession } from '../app/platform-auth.ts';
 
 // Exercise the real API handler with an isolated database and private file store.
@@ -46,7 +46,10 @@ assert.ok(loginText.includes('Temporary password: ' + temporary));
 assert.ok(loginText.includes('Email: ' + alphaEmail));
 const copiedUrl = new URL(loginText.split('\n')[0].slice('Client application: '.length));
 assert.equal(copiedUrl.searchParams.get('application'), alpha.data.id);
-assert.equal(copiedUrl.searchParams.has('temporaryPassword'), false, 'credentials are not sent as server query parameters');
+assert.equal(copiedUrl.searchParams.get('email'), alphaEmail);
+assert.equal(copiedUrl.searchParams.get('password'), temporary);
+assert.equal(copiedUrl.hash, '');
+assert.equal(clientLoginUrl('https://example.test', alpha.data.id, accessForCopy, {email: alphaEmail, password: temporary, version: alpha.data.clientCredentialVersion}), copiedUrl.href, 'Copy client link returns just the URL');
 assert.deepEqual(readLoginLink(copiedUrl.href).prefill, {email: alphaEmail, password: temporary});
 assert.equal(readLoginLink(copiedUrl.href).cleanUrl, '/?application=' + alpha.data.id);
 const complexPassword = 'Temporary + & # ? = / % 😀 password';
@@ -56,6 +59,9 @@ assert.equal(readLoginLink(base + '/?application=keep#email=invalid&temporaryPas
 assert.deepEqual(readLoginLink(base + '/#email=invalid&temporaryPassword=secret').prefill, {email: '', password: ''});
 assert.equal(readLoginLink(base + '/#section=help').hasCredentials, false);
 assert.equal(readLoginLink(base + '/#email=alpha%40example.test&temporaryPassword=' + 'x'.repeat(1025)).prefill.password, '');
+assert.deepEqual(readLoginLink(base + '/?application=keep&email=alpha%40example.test&password=Query%2Bpassword&view=login#email=old%40example.test&temporaryPassword=old&section=help'), {prefill: {email: alphaEmail, password: 'Query+password'}, cleanUrl: '/?application=keep&view=login#section=help', hasCredentials: true});
+assert.deepEqual(readLoginLink(base + '/#email=alpha%40example.test&temporaryPassword=Legacy%2Bpassword').prefill, {email: alphaEmail, password: 'Legacy+password'});
+assert.deepEqual(readLoginLink(base + '/?email=invalid&password=secret').prefill, {email: '', password: ''});
 assert.throws(() => clientLoginText(base, alpha.data.id, accessForCopy), /Reset the client password/);
 assert.throws(() => clientLoginText(base, alpha.data.id, accessForCopy, {email: alphaEmail, password: temporary, version: 'stale'}), /Reset the client password/);
 assert.equal((await api('applications', {cookie: admin, body: {assignedEmail: 'missing-password@example.test', data: {legalName: 'Invalid'}}})).status, 400);
