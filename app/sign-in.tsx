@@ -52,7 +52,7 @@ export default function SignIn({ onSignIn, initialError = '' }: { onSignIn: () =
 
       <button type="submit" className="btn primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}<ArrowRight size={17}/></button>
 
-      <small className="signin-private"><LockKeyhole size={12}/> Private administrator access</small>
+      <small className="signin-private"><LockKeyhole size={12}/> Private client & team access</small>
 
     </form></section>
 

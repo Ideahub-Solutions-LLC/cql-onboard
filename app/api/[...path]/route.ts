@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { allowLoginAttempt, changeAdministratorPassword, verifyAdministrator, createAdministratorSession, endAdministratorSession, getPlatformUser } from '../../platform-auth';
+import { allowLoginAttempt, changePlatformPassword, verifyPlatformCredentials, createPlatformSession, provisionClientAccount, getClientAccess, endAdministratorSession, getPlatformUser } from '../../platform-auth';
 import { defaultConfig, initialData, taskNames, steps, unlockedStep, normalizeOnboarding, submissionErrors, onboardingTasks } from '../../../lib/shared';
 import { applicationTasks } from '../../../lib/pricing';
 import { catalogConfig, validateSignupOptions, validateFees } from '../../../lib/catalog';
@@ -16,12 +16,13 @@ async function handler(req:Request){try{
  if(req.method!=='GET'){const origin=req.headers.get('origin');if(!origin||origin!==new URL(req.url).origin)return json({error:'Invalid request origin.'},403);}
  await ensureApplicationSchema(db);
  if(path.length===2&&path[0]==='auth'&&path[1]==='login'&&req.method==='POST'){
-  if(!await allowLoginAttempt(db))return json({error:'Too many sign-in attempts. Try again in 15 minutes.'},429);
   if(Number(req.headers.get('content-length')||0)>4096)return json({error:'Invalid sign-in request.'},400);
   let credentials:any;try{credentials=await req.json();}catch{return json({error:'Invalid sign-in request.'},400);}
-  const version=await verifyAdministrator(credentials?.email,credentials?.password,db);
-  if(!version)return json({error:'Email or password is incorrect.'},401);
-  const cookie=await createAdministratorSession(req,db,version);
+  const loginEmail=typeof credentials?.email==='string'?credentials.email.trim().toLowerCase():'';
+  if(!await allowLoginAttempt(db,Date.now(),loginEmail))return json({error:'Too many sign-in attempts. Try again in 15 minutes.'},429);
+  const verified=await verifyPlatformCredentials(credentials?.email,credentials?.password,db);
+  if(!verified)return json({error:'Email or password is incorrect.'},401);
+  const cookie=await createPlatformSession(req,db,verified.email,verified.version);
   const response=json({signedIn:true});response.headers.set('Set-Cookie',cookie);return response;
  }
  if(path.length===2&&path[0]==='auth'&&path[1]==='logout'&&req.method==='POST'){
@@ -30,17 +31,18 @@ async function handler(req:Request){try{
  const user=await getPlatformUser(req,db);
  if(!user)return json({error:'Please sign in to continue.'},401);
  if(path.length===2&&path[0]==='auth'&&path[1]==='password'&&req.method==='POST'){
-  const body:any=await req.json();await changeAdministratorPassword(db,body.currentPassword,body.newPassword,body.confirmPassword);
+  const body:any=await req.json();await changePlatformPassword(db,user.email,body.currentPassword,body.newPassword,body.confirmPassword);
   const cookie=await endAdministratorSession(req,db);const response=json({changed:true});response.headers.set('Set-Cookie',cookie);return response;
  }
+ if(user.mustChangePassword&&!(path.length===1&&path[0]==='session'&&req.method==='GET'))return json({error:'Change your temporary password before continuing.',code:'PASSWORD_CHANGE_REQUIRED'},403);
  const cfgRow=await db.prepare('SELECT value FROM settings WHERE id = ?').bind('config').first<{value:string}>();
  const config=catalogConfig({...defaultConfig,...catalogConfig(cfgRow?JSON.parse(cfgRow.value):{})});
- const admin=true;
+ const admin=user.role==='admin';
  const validateRequests=(d:any,previous:any={})=>{if(d.requestedFeatures!==undefined&&(!Array.isArray(d.requestedFeatures)||d.requestedFeatures.some((name:string)=>!config.fees.some((f:any)=>f.name===name)&&!(previous.requestedFeatures||[]).includes(name))))fail('A requested feature is no longer on the menu. Review Pricing & features before saving.');};
  const visibleRow=(r:any)=>{const result=parseRow(r);if(!admin){delete result.notes;delete result.owner_id;}return result;};
  const getApp=async(id:string)=>{const r:any=await db.prepare('SELECT * FROM applications WHERE id = ?').bind(id).first();if(!r)fail('Application not found',404);if(!admin&&r.owner_id!==user.userId&&(user.isAnonymous||r.assigned_email?.toLowerCase()!==user.email?.toLowerCase()))fail('Access denied',403);return r;};
  const assertEdit=(r:any)=>{if(!admin&&r.status!=='draft'&&r.status!=='changes_requested')fail('Your application is with our team. Request changes before editing.',409);};
- if(path[0]==='session'&&req.method==='GET')return json({user:{name:user.displayName||user.email,email:user.email},admin,config:admin?config:{...config,teamEmails:undefined,signupOptions:config.signupOptions.filter((o:any)=>o.enabled),vaultInstructions:config.vaultInstructions}});
+ if(path[0]==='session'&&req.method==='GET')return json({user:{name:user.displayName||user.email,email:user.email},admin,mustChangePassword:user.mustChangePassword,config:admin?config:{...config,teamEmails:undefined,signupOptions:config.signupOptions.filter((o:any)=>o.enabled),vaultInstructions:config.vaultInstructions}});
  if(path[0]==='config'&&req.method==='PUT'){
   if(!admin)fail('Team access required',403);const c=await req.json() as any;
   if(!c.brandName||!/^#[0-9a-f]{6}$/i.test(c.accent)||!email(c.supportEmail))fail('Check the brand name, color, and support email.');
@@ -75,9 +77,14 @@ async function handler(req:Request){try{
  }
  if(path[0]==='applications'&&!id){
   if(req.method==='GET'){const rows=admin?await db.prepare('SELECT * FROM applications ORDER BY updated_at DESC LIMIT 250').all():user.isAnonymous?await db.prepare('SELECT * FROM applications WHERE owner_id=? ORDER BY updated_at DESC LIMIT 100').bind(user.userId).all():await db.prepare('SELECT * FROM applications WHERE owner_id=? OR lower(assigned_email)=? ORDER BY updated_at DESC LIMIT 100').bind(user.userId,user.email?.toLowerCase()||'').all();return json(rows.results.map(visibleRow));}
-  if(req.method==='POST'){const b:any=await req.json();const appId=crypto.randomUUID();const now=new Date().toISOString();if(b.assignedEmail&&!email(b.assignedEmail))fail('Enter a valid client email.');const data=normalizeOnboarding({...initialData,...clean(b.data||{})});if(!admin){if(!data.contactEmail)data.contactEmail=user.email;if(!data.contactName&&user.fullName)data.contactName=user.fullName;}validateRequests(data);const assigned=admin?String(b.assignedEmail||'').toLowerCase():user.email?.toLowerCase();await db.prepare('INSERT INTO applications (id,owner_id,assigned_email,data,status,step,checklist,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(appId,user.userId,assigned||null,JSON.stringify(data),'draft',0,'{}','',now,now).run();return json(parseRow(await getApp(appId)),201);}
+  if(req.method==='POST'){if(!admin)fail('Only the administrator can create applications.',403);const b:any=await req.json();const appId=crypto.randomUUID();const now=new Date().toISOString();if(b.assignedEmail&&!email(b.assignedEmail))fail('Enter a valid client email.');const data=normalizeOnboarding({...initialData,...clean(b.data||{})});if(!admin){if(!data.contactEmail)data.contactEmail=user.email;if(!data.contactName&&user.fullName)data.contactName=user.fullName;}validateRequests(data);const assigned=admin?String(b.assignedEmail||'').toLowerCase():user.email?.toLowerCase();await db.prepare('INSERT INTO applications (id,owner_id,assigned_email,data,status,step,checklist,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(appId,user.userId,assigned||null,JSON.stringify(data),'draft',0,'{}','',now,now).run();let clientAccountCreated=false;let clientCredentialVersion:string|undefined;try{if(assigned){const access=await provisionClientAccount(db,assigned,String(data.contactName||data.legalName||'Client'),b.temporaryPassword,{allowExisting:true});if(access){clientAccountCreated=access.created;clientCredentialVersion=access.version;}}}catch(error){await db.prepare('DELETE FROM applications WHERE id=?').bind(appId).run();throw error;}return json({...parseRow(await getApp(appId)),clientAccountCreated,clientCredentialVersion},201);}
  }
  if(path[0]==='applications'&&id){const r=await getApp(id);
+  if(path.length===3&&path[2]==='client-access'){
+   if(!admin)fail('Administrator access required',403);if(!r.assigned_email)fail('This application has no assigned client email.');
+   if(req.method==='GET')return json({email:r.assigned_email,...await getClientAccess(db,r.assigned_email)});
+   if(req.method==='POST'||req.method==='PUT'){const body:any=await req.json();const access=await provisionClientAccount(db,r.assigned_email,parseRow(r).data.contactName||parseRow(r).data.legalName,body.temporaryPassword,{reset:req.method==='PUT'});return json({saved:true,email:r.assigned_email,mustChangePassword:true,credentialVersion:access?access.version:undefined});}
+  }
   if(path.length===2&&req.method==='GET'){const files=await db.prepare('SELECT id,name,category,size,type,created_at FROM attachments WHERE application_id=? ORDER BY created_at').bind(id).all();const secret=await db.prepare('SELECT updated_at FROM secrets WHERE application_id=?').bind(id).first();return json({...visibleRow(r),files:files.results,hasSecret:!!secret});}
   if(path.length===2&&req.method==='PUT'){assertEdit(r);const b:any=await req.json();const d=normalizeOnboarding(clean(b.data));validateRequests(d,parseRow(r).data);const step=Number.isInteger(b.step)?Math.max(0,Math.min(steps.length-1,b.step)):0;if(step>unlockedStep(d,config))fail('Finish the current onboarding step before continuing.',409);const now=new Date().toISOString();await db.prepare('UPDATE applications SET data=?,step=?,updated_at=? WHERE id=?').bind(JSON.stringify(d),step,now,id).run();return json({savedAt:now});}
   if(path[2]==='submit'&&req.method==='POST'){assertEdit(r);const b:any=await req.json();const d=normalizeOnboarding(clean(b.data));validateRequests(d,parseRow(r).data);if(b.pricingVersion!==config.pricingVersion)fail('The price list changed. Review the updated prices before submitting.',409);const errors=submissionErrors(d,config);if(errors.length)fail(errors.join(' '));const chosen=config.signupOptions.find((o:any)=>o.id===d.signupId&&o.enabled);d.plan=d.alreadyHaveAccount?'I already have an account':chosen.name;const now=new Date().toISOString();const snapshot={version:config.pricingVersion,fees:config.fees,priceList:config.priceList,signupOption:d.alreadyHaveAccount?{name:"Existing account"}:chosen,note:config.pricingNote,selectedPlan:d.plan,pricingTier:chosen?.pricingTier||null,requestedFeatures:d.requestedFeatures||[],aiBilling:d.aiBilling,acknowledgedAt:now,signature:d.signature};await db.prepare('UPDATE applications SET data=?,status=?,step=?,submitted_at=?,updated_at=?,pricing_snapshot=? WHERE id=?').bind(JSON.stringify(d),'submitted',steps.length-1,now,now,JSON.stringify(snapshot),id).run();return json({submittedAt:now});}

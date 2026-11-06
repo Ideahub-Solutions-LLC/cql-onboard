@@ -12,7 +12,7 @@
     "db:migrate": "node scripts/migrate-postgres.mjs",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "test": "node tests/catalog.mjs && node tests/pricing.mjs && node tests/onboarding.mjs && node tests/platform-auth.mjs",
+    "test": "node tests/catalog.mjs && node tests/pricing.mjs && node tests/onboarding.mjs && node tests/platform-auth.mjs && node tests/client-access.mjs",
     "test:api": "node tests/platform-auth-api.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "node scripts/migrate-local.mjs"
@@ -57,6 +57,7 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
+    "esbuild": "^0.28.0",
     "eslint": "9.39.4",
     "eslint-config-next": "16.3.4",
     "json-rpc-2.0": "1.7.1",

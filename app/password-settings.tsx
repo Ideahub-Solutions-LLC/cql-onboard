@@ -2,14 +2,14 @@
 import { useState } from 'react';
 import { LockKeyhole } from 'lucide-react';
 
-export default function PasswordSettings({ email }: { email: string }) {
+export default function PasswordSettings({ email, administrator = true, forced = false }: { email: string; administrator?: boolean; forced?: boolean }) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  return <section className="panel panel-pad password-settings"><h3><LockKeyhole size={19}/> Administrator password</h3>
-    <p>Administrator: <strong>{email}</strong></p><p>After changing your password, all sessions will be signed out. Use your new password to sign in again.</p>
+  return <section className="panel panel-pad password-settings"><h3><LockKeyhole size={19}/> {forced ? 'Set your own password' : administrator ? 'Administrator password' : 'My password'}</h3>
+    <p>Account: <strong>{email}</strong></p>{forced && <p>You are using a temporary password. Set your own password before opening your application.</p>}<p>After changing your password, all sessions will be signed out. Use your new password to sign in again.</p>
     <form onSubmit={async event => {
       event.preventDefault(); setError('');
       if (newPassword !== confirmPassword) { setError('New passwords do not match.'); return; }
