@@ -5,6 +5,14 @@ import { allowLoginAttempt, verifyAdministrator, createAdministratorSession, get
 
 const sqlite = new DatabaseSync(':memory:');
 
+// Match D1's 50-byte LIKE pattern limit, which ordinary SQLite does not enforce.
+sqlite.function('like', {deterministic: true}, (pattern, value) => {
+  if (Buffer.byteLength(pattern) > 50) throw new Error('LIKE or GLOB pattern too complex');
+  const expression = pattern.split('%').map(part => part.split('_').map(text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.')).join('.*');
+  return new RegExp('^' + expression + '$', 'i').test(value) ? 1 : 0;
+});
+assert.throws(() => sqlite.prepare('SELECT ? LIKE ?').get('value', 'x'.repeat(51)), /pattern too complex/);
+
 const db = { prepare(sql) { const statement = sqlite.prepare(sql); let values = []; return { bind(...args) { values = args; return this; }, async run() { return {meta:{changes:Number(statement.run(...values).changes)}}; }, async first() { return statement.get(...values) ?? null; } }; } };
 await Promise.all([ensureApplicationSchema(db), ensureApplicationSchema(db)]);
 sqlite.exec("INSERT INTO settings (id,value) VALUES ('config','{\"brandName\":\"CQL\"}'),('owner','original-owner')");
@@ -34,6 +42,12 @@ for (let i = 0; i < 20; i++) assert.equal(await allowLoginAttempt(db, 1800000), 
 assert.equal(await allowLoginAttempt(db, 1800000), false);
 assert.equal(await allowLoginAttempt(db, 2700000), true);
 assert.equal(sqlite.prepare("SELECT count(*) AS n FROM settings WHERE id LIKE 'auth:attempt:%'").get().n, 1);
+const otherAccount = 'rate-limit-isolation@example.test';
+for (let i = 0; i < 20; i++) assert.equal(await allowLoginAttempt(db, 2700000, otherAccount), true);
+assert.equal(await allowLoginAttempt(db, 2700000, otherAccount), false);
+assert.equal(await allowLoginAttempt(db, 3600000), true);
+assert.equal(await allowLoginAttempt(db, 2700000, otherAccount), false, 'cleanup cannot delete another account’s active limit');
+assert.equal(sqlite.prepare("SELECT count(*) AS n FROM settings WHERE id LIKE 'auth:attempt:%'").get().n, 2, 'old windows are removed only for the requested account');
 if (process.env.ADMIN_TEST_PASSWORD) {
   const oldCookie = (await createAdministratorSession(request(), db)).split(';')[0];
   const replacement = 'Synthetic replacement password 123!';

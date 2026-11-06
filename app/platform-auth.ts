@@ -59,7 +59,9 @@ export async function verifyAdministrator(email: unknown, password: unknown, db:
 export async function allowLoginAttempt(db: AuthDatabase, now = Date.now(), email = administratorEmail) {
   const prefix = 'auth:attempt:' + await digest(normalizeEmail(email)) + ':';
   const key = prefix + Math.floor(now / 900000);
-  await db.prepare('DELETE FROM settings WHERE id LIKE ? AND id <> ?').bind(prefix + '%', key).run();
+  // D1 limits LIKE patterns to 50 bytes; account hashes make this prefix longer.
+  // The range retains the existing keys and uses the primary-key index.
+  await db.prepare('DELETE FROM settings WHERE id >= ? AND id < ? AND id <> ?').bind(prefix, prefix.slice(0, -1) + ';', key).run();
   await db.prepare('INSERT INTO settings (id,value) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET value=CAST(CAST(settings.value AS INTEGER)+1 AS TEXT)').bind(key, '1').run();
   const row = await db.prepare('SELECT value FROM settings WHERE id=?').bind(key).first<{value: string}>();
   return Number(row?.value) <= 20;
