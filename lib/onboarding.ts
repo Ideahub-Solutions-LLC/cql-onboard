@@ -62,14 +62,14 @@ export function requiredFields(d:Answers):[number,string,string][]{
  for(const color of brandColors)if(color.required)fields.push([BRANDING_STEP,color.name,color.label]);
  if(d.businessProfileVersion===1){
   const profileFields=[['friendlyBusinessName','Friendly Business Name'],['businessNiche','Business Niche'],['businessType','Business Type'],['businessIndustry','Business Industry'],['registrationIdType','Business Registration ID Type'],['address','Street Address'],['city','City'],['postalCode','Postal/Zip Code'],['region','State / Prov / Region'],['country','Country'],['representativeFirstName','First Name'],['representativeLastName','Last Name'],['representativeEmail','Representative Email'],['representativeJobPosition','Job Position'],['representativePhone','Phone Number (With Country Code)'],['timezone','Time zone']];
-  for(const [name,label] of profileFields)fields.push([1,name,label]);
+  for(const [name,label] of profileFields)if(!d.businessNotRegistered||!['businessIndustry','registrationIdType','taxId'].includes(name))fields.push([1,name,label]);
  }
  if(hasService(d,'Phone & SMS')&&d.numberType==='Port an existing number')fields.push([2,'existingNumber','Number to transfer']);
  if(hasService(d,'Phone & SMS')&&d.differentRoutingPhone)fields.push([2,'routingPhone','Call forwarding number']);
  if(hasService(d,'Booking calendar')&&d.customizeCalendar){fields.push([2,'timezone','Business timezone']);if(d.differentCalendarOwner)fields.push([2,'calendarOwner','Calendar owner email']);}
  if(hasService(d,'Phone & SMS')&&d.provideVerificationNow){
   for(const [key,label] of [['address','Registered address'],['city','City'],['region','State / region'],['postalCode','ZIP / postal code'],['campaign','Messaging purpose'],['consentMethod','How contacts opt in'],['sampleMessage','Sample message']])fields.push([2,key,label]);
-  if(d.brandType==='Registered business')fields.push([2,'taxId','Business registration / tax ID']);
+  if(d.brandType==='Registered business'&&!d.businessNotRegistered)fields.push([2,'taxId','Business registration / tax ID']);
   if(d.differentRepresentative)fields.push([2,'representative','Authorized representative'],[2,'representativeEmail','Representative email']);
  }
  return fields;
@@ -108,7 +108,7 @@ export function stepErrors(step:number,d:Answers,config:Config):string[]{
   if(!['Help me choose','Choose my services'].includes(answer(d,'setupMode')))errors.push('Choose how you would like to plan your setup.');
   if(d.setupMode==='Choose my services'&&(!list(d,'launchTasks').length||list(d,'launchTasks').some(s=>!setupServices.includes(s))))errors.push('Choose at least one service, or let your specialist help you choose.');
   if(hasService(d,'Booking calendar')&&d.customizeCalendar){if(d.differentCalendarOwner&&answer(d,'calendarOwner')&&!validEmail(answer(d,'calendarOwner')))errors.push('Enter a valid calendar owner email.');if(!list(d,'days').length)errors.push('Choose at least one available day.');if(!/^\d{2}:\d{2}$/.test(answer(d,'startTime'))||!/^\d{2}:\d{2}$/.test(answer(d,'endTime'))||answer(d,'startTime')>=answer(d,'endTime'))errors.push('Choose an end time after the start time.');}
-  if(hasService(d,'Phone & SMS')&&d.provideVerificationNow){if(d.differentRepresentative&&answer(d,'representativeEmail')&&!validEmail(answer(d,'representativeEmail')))errors.push('Enter a valid representative email.');if(d.brandType==='Registered business'&&d.country==='United States'&&answer(d,'taxId')&&!/^\d{2}-?\d{7}$/.test(answer(d,'taxId')))errors.push('Enter your nine-digit EIN.');}
+  if(hasService(d,'Phone & SMS')&&d.provideVerificationNow){if(d.differentRepresentative&&answer(d,'representativeEmail')&&!validEmail(answer(d,'representativeEmail')))errors.push('Enter a valid representative email.');if(!d.businessNotRegistered&&d.brandType==='Registered business'&&d.country==='United States'&&answer(d,'taxId')&&!/^\d{2}-?\d{7}$/.test(answer(d,'taxId')))errors.push('Enter your nine-digit EIN.');}
   if(hasService(d,'Contact import')&&d.importMode==='I have contacts to import'&&!d.importConsent)errors.push('Confirm permission to share your contact records.');
  }
  return errors;

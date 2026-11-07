@@ -12,10 +12,10 @@ const languages = ['English (United States)', 'English (United Kingdom)', 'Spani
 const countries = ['United States', 'Canada', 'United Kingdom', 'Australia', 'New Zealand', 'Philippines', 'Taiwan', 'India', 'Singapore', 'Mexico', 'Other'];
 
 // Suggested values remain editable for businesses outside the common categories.
-function SuggestedField({ name, label, options, required = false }: { name: string; label: string; options: string[]; required?: boolean }) {
+function SuggestedField({ name, label, options, required = false, disabled = false }: { name: string; label: string; options: string[]; required?: boolean; disabled?: boolean }) {
   const { data, set } = useContext(FormContext);
   const id = useId();
-  return <label className="field"><span>{label}{required && <b className="required">* Required</b>}</span><input list={id} value={data[name] || ''} aria-required={required || undefined} maxLength={2000} onChange={event => set(name, event.target.value)}/><datalist id={id}>{[...new Set(options)].map(option => <option key={option} value={option}/>)}</datalist></label>;
+  return <label className="field"><span>{label}{required && <b className="required">* Required</b>}</span><input disabled={disabled} list={id} value={data[name] || ''} aria-required={required || undefined} maxLength={2000} onChange={event => set(name, event.target.value)}/><datalist id={id}>{[...new Set(options)].map(option => <option key={option} value={option}/>)}</datalist></label>;
 }
 
 export default function BusinessProfile() {
@@ -51,9 +51,9 @@ export default function BusinessProfile() {
     <Tabs.Content value="1" className="business-profile-panel"><Section title={labels[1]}>
       <div className="business-profile-stack">
         <SuggestedField name="businessType" required label="Business Type" options={['Limited Liability Company Or Sole-Proprietorship', 'Corporation', 'Partnership', 'Nonprofit', 'Cooperative', 'Other']}/>
-        <SuggestedField name="businessIndustry" required label="Business Industry" options={['Technology', 'Healthcare', 'Finance', 'Education', 'Construction', 'Professional Services', 'Retail', 'Other']}/>
+        <SuggestedField name="businessIndustry" required={!data.businessNotRegistered} disabled={!!data.businessNotRegistered} label="Business Industry" options={['Technology', 'Healthcare', 'Finance', 'Education', 'Construction', 'Professional Services', 'Retail', 'Other']}/>
         <fieldset className="business-registration">
-          <SuggestedField name="registrationIdType" required label="Business Registration ID Type" options={['USA: Employer Identification Number (EIN)', 'Canada: Business Number (BN)', 'UK: Company Registration Number', 'Australia: Australian Business Number (ABN)', 'Not registered', 'Other']}/>
+          <SuggestedField name="registrationIdType" required={!data.businessNotRegistered} disabled={!!data.businessNotRegistered} label="Business Registration ID Type" options={['USA: Employer Identification Number (EIN)', 'Canada: Business Number (BN)', 'UK: Company Registration Number', 'Australia: Australian Business Number (ABN)', 'Not registered', 'Other']}/>
           <Field name="taxId" label="Business Registration Number" disabled={!!data.businessNotRegistered}/>
         </fieldset>
         <CheckField name="businessNotRegistered">My business is Not registered</CheckField>

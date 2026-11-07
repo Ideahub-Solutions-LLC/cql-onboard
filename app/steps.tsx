@@ -1,19 +1,20 @@
 'use client';
 import React,{useContext} from 'react';
 import {Field,CheckField,Choices,Multi,Section,Note,Upload,FeeMenu,FormContext} from './form-parts';
-import {ArrowRight,FileDown,Clock3} from 'lucide-react';
+import {FileDown,Clock3} from 'lucide-react';
 import {PhoneCalendarStep,ContactsFollowupStep,AiReceptionistStep} from './setup-preference-steps';
-import {PHONE_CALENDAR_STEP,CONTACTS_FOLLOWUP_STEP,AI_RECEPTIONIST_STEP,contactOptions,aiOptions} from '../lib/setup-preferences.mjs';
+import {PHONE_CALENDAR_STEP,CONTACTS_FOLLOWUP_STEP,AI_RECEPTIONIST_STEP} from '../lib/setup-preferences.mjs';
 import SignupStep from './signup-step';
 import DomainEmailStep from './domain-email-step';
 import {DOMAIN_EMAIL_STEP} from '../lib/domain-email.mjs';
 import BrandingStep from './branding-step';
-import {BRANDING_STEP,brandColors,colorRgb} from '../lib/branding.mjs';
+import {BRANDING_STEP} from '../lib/branding.mjs';
 import BusinessProfile from './business-profile';
+import OnboardingSummary from './onboarding-summary';
 import {deferredSetupItems,missingFields} from '../lib/shared';
 import {activeStepIndices,setupStepEnabled,setupServices,hasService} from '../lib/onboarding';
 
-export default function StepContent({step,config,exportBrief,jump}:any){
+export default function StepContent({step,config,exportBrief}:any){
  const {data}=useContext(FormContext);
  const service=(name:string)=>hasService(data,name);
  const later=deferredSetupItems(data);
@@ -80,10 +81,8 @@ export default function StepContent({step,config,exportBrief,jump}:any){
   {step===CONTACTS_FOLLOWUP_STEP&&<ContactsFollowupStep/>}
   {step===AI_RECEPTIONIST_STEP&&<AiReceptionistStep/>}
   {step===3&&<>
-   <div className="quick-review-grid">
-    {[['Your account',data.plan||'Account confirmation needed',0],['Your business',[data.legalName,data.services,data.contactName,data.contactEmail,data.contactPhone].filter(Boolean).join(' · '),1],['Your setup',data.setupMode==='Help me choose'?'Your specialist will recommend the right setup.':(data.launchTasks||[]).join(' · '),2],['Branding',brandColors.filter(color=>data[color.name]).map(color=>color.label+': '+data[color.name]+' (RGB '+colorRgb(data[color.name])+')').join(' · '),BRANDING_STEP],['Domain and Email Reference',[data.domain,data.domainProvider,data.businessEmailProvider,data.emailSetupPreference,data.preferredAccessMethod,data.accessNotes].filter(Boolean).join(' · '),DOMAIN_EMAIL_STEP],['Phone & calendar',[data.phonePreference,data.preferredAreaCodes,data.forwardCallsTo,data.calendarAppointmentOwner,data.appointmentDuration,data.bookingBuffer,data.bookingNotice,data.availabilityDays,data.availabilityHours].filter(Boolean).join(' · '),PHONE_CALENDAR_STEP],['Contacts & follow-up',[data.contactsPreference,data.contactsPreference===contactOptions[0]?data.contactListNotes:'',data.followupPlaybookPreference,data.followupGoal,data.followupFrequency,data.followupStyle].filter(Boolean).join(' · '),CONTACTS_FOLLOWUP_STEP],['AI receptionist',[data.aiReceptionistPreference,...(data.aiReceptionistPreference===aiOptions[0]?[data.aiDiscussServices,data.aiCallerQuestions,data.aiBookingRules,data.aiPreferredLanguage,data.aiToneOfVoice,data.aiHumanHandoff,data.aiAdditionalInstructions]:[])].filter(Boolean).join(' · '),AI_RECEPTIONIST_STEP]].filter(([, ,index])=>activeStepIndices.includes(Number(index))).map(([title,value,index])=><button type="button" className="quick-review-card" key={String(title)} onClick={()=>jump(Number(index))}><div><strong>{title}</strong><p>{value}</p></div><span>Edit <ArrowRight size={15}/></span></button>)}
-   </div>
-   {missingFields(data).filter(([index])=>activeStepIndices.includes(index)).length>0&&<Note>There are {missingFields(data).filter(([index])=>activeStepIndices.includes(index)).length} required details to complete. Select Edit above to add them.</Note>}
+   <OnboardingSummary config={config}/>
+   {missingFields(data).filter(([index])=>activeStepIndices.includes(index)).length>0&&<Note>There are {missingFields(data).filter(([index])=>activeStepIndices.includes(index)).length} required details to complete. Use the step menu to add them.</Note>}
    {!!later.length&&<div className="specialist-handoff"><Clock3 size={22}/><div><h3>With your setup specialist</h3><p>You can send this brief now. Your team will follow up on:</p><ul>{later.map(item=><li key={item}>{item}</li>)}</ul><p>These items still need to be resolved before the relevant services go live.</p></div></div>}
    <details className="quick-details"><summary>Your subscription & usage rates <span>Review pricing</span></summary><div className="quick-details-body"><Note>Your account and billing arrangement will be verified by the team. Items marked Confirm with CQL need a quote before activation.</Note><FeeMenu config={config}/></div></details>
    {!!data.requestedFeatures?.length&&<Section title="Extra feature requests"><p>{data.requestedFeatures.join(' · ')}</p><p className="setup-later-note">Requests are for team review and do not activate services or charge your card.</p></Section>}
@@ -93,7 +92,7 @@ export default function StepContent({step,config,exportBrief,jump}:any){
     <CheckField name="reviewUsage">I understand that subscription, usage, and optional services may have additional charges. Unconfirmed rates need a separate quote and acceptance before activation. Sending this brief does not charge my card.</CheckField>
     <Field name="signature" label="Your full name to acknowledge" required placeholder="Type your name"/>
    </Section>
-   <button type="button" className="btn secondary" onClick={exportBrief}><FileDown size={16}/> Download my setup brief</button>
+   <button type="button" className="btn secondary" onClick={exportBrief}><FileDown size={16}/> Download my setup brief (PDF)</button>
   </>}
  </>;
 }

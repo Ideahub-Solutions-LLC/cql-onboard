@@ -185,7 +185,21 @@ assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,meth
 assert.equal((await api(`applications/${alpha.data.id}/secret`, {cookie: alphaCookie})).status, 403);
 assert.equal((await api('price-lists', {cookie: alphaCookie, body: ownUpload})).status, 403);
 await api(`applications/${alpha.data.id}/team`, {cookie: admin, method: 'PUT', body: {status: 'submitted', checklist: {}}});
-assert.equal((await api('applications/' + alpha.data.id, {cookie: alphaCookie, method: 'PUT', body: {data: savedData, step: 0}})).status, 409);
+assert.equal((await api('applications/' + alpha.data.id, {cookie: alphaCookie, method: 'PUT', body: {data: savedData, step: 0}})).status, 200, 'submitted clients can correct their own information');
+const corrected={...completePreferences,legalName:'Corrected business name',reviewAccuracy:true,reviewAuthority:true,reviewUsage:true,signature:'Test Client'};
+const pricingVersion=(await api('session',{cookie:alphaCookie})).data.config.pricingVersion;
+for(const status of ['submitted','in_progress','ready','launched']){
+ sqlite.prepare('UPDATE applications SET status=?,checklist=? WHERE id=?').run(status,JSON.stringify({'Review onboarding':'Complete'}),alpha.data.id);
+ assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:corrected,step:1}})).status,200);
+ assert.equal((await api(`applications/${alpha.data.id}`,{cookie:betaCookie,method:'PUT',body:{data:corrected,step:1}})).status,403,'other clients cannot change submitted information');
+ const sent=await api(`applications/${alpha.data.id}/submit`,{cookie:alphaCookie,body:{data:corrected,pricingVersion}});
+ assert.equal(sent.status,200); assert.equal(sent.data.status,status);
+ const persisted=(await api(`applications/${alpha.data.id}`,{cookie:alphaCookie})).data;
+ assert.equal(persisted.data.legalName,'Corrected business name');assert.equal(persisted.status,status);assert.equal(persisted.checklist['Review onboarding'],'Complete');
+ assert.ok(persisted.pricingSnapshot.acknowledgedAt);
+}
+const unregistered={...requiredProfile,businessNotRegistered:true,businessIndustry:'',registrationIdType:'',taxId:''};
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:unregistered,step:4}})).status,200,'unregistered businesses can continue without registration fields');
 await api(`applications/${alpha.data.id}/team`, {cookie: admin, method: 'PUT', body: {status: 'changes_requested', checklist: {}}});
 assert.equal((await api('applications/' + alpha.data.id, {cookie: alphaCookie, method: 'PUT', body: {data: savedData, step: 0}})).status, 200);
 
@@ -308,7 +322,8 @@ const uiCompiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',conte
  import {FormContext} from './app/form-parts';
  import {PhoneCalendarStep,ContactsFollowupStep,AiReceptionistStep} from './app/setup-preference-steps';
  import BusinessProfile from './app/business-profile';
- export function render(kind,data){return renderToStaticMarkup(createElement(FormContext.Provider,{value:{data,set(){},files:[],upload(){},remove(){},uploading:false}},createElement({phone:PhoneCalendarStep,contacts:ContactsFollowupStep,ai:AiReceptionistStep,business:BusinessProfile}[kind])));}
+ import OnboardingSummary from './app/onboarding-summary';
+ export function render(kind,data){return renderToStaticMarkup(createElement(FormContext.Provider,{value:{data,set(){},files:[],upload(){},remove(){},uploading:false}},createElement({phone:PhoneCalendarStep,contacts:ContactsFollowupStep,ai:AiReceptionistStep,business:BusinessProfile,summary:()=>createElement(OnboardingSummary,{config:{signupOptions:[]}})}[kind])));}
 `},bundle:true,format:'esm',platform:'node',write:false,jsx:'automatic',logLevel:'silent',banner:{js:`import {createRequire as cqlCreateRequire} from 'node:module'; const require=cqlCreateRequire(${JSON.stringify(process.cwd()+'/package.json')});`}});
 const {render:renderPreferences}=await import('data:text/javascript;base64,'+Buffer.from(uiCompiled.outputFiles[0].contents).toString('base64'));
 const noContacts=renderPreferences('contacts',{contactsPreference:'Not yet',followupPlaybookPreference:'No'});
@@ -326,6 +341,8 @@ assert.ok(!phoneHtml.includes('Business timezone'));assert.ok(!phoneHtml.include
 assert.ok(phoneHtml.includes('Appointment duration (optional)'));assert.ok(phoneHtml.includes('Minimum booking notice (optional)'));
 const businessHtml=renderPreferences('business',{});
 assert.ok(!businessHtml.includes('Previous tab'));assert.ok(!businessHtml.includes('Next tab'));
+const summaryHtml=renderPreferences('summary',{legalName:'Summary Test',followupGoal:'Book qualified appointments'});
+assert.equal((summaryHtml.match(/<details/g)||[]).length,7);assert.ok(summaryHtml.includes('<summary>'));assert.ok(summaryHtml.includes('Summary Test'));assert.ok(summaryHtml.includes('Book qualified appointments'));assert.ok(!summaryHtml.includes('Edit'));
 console.log('PASS rendered preference steps: conditional contact/SOP/AI sections, excluded phone fields, optional booking settings, and removed tab buttons');
 sqlite.close(); delete globalThis.__cqlTestEnv;
 console.log('PASS account API: provisioning, password change/reset, isolation, private files, draft resume, login limits, copied-link autofill, administrator deletion, shared-account preservation, final-account revocation, storage retry, transaction rollback, and upload races');

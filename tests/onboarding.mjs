@@ -55,7 +55,9 @@ check('tabbed business profile preserves independent representative details and 
  }
  assert.ok(stepErrors(1,{...profile,businessRegions:[]},config).some(error=>/region of operations/.test(error)));
  assert.ok(stepErrors(1,{...profile,businessRegions:['invalid']},config).length);
- assert.ok(stepErrors(1,{...profile,businessNotRegistered:true,registrationIdType:''},config).length);
+ assert.deepEqual(stepErrors(1,{...profile,businessNotRegistered:true,businessIndustry:'',registrationIdType:'',taxId:''},config),[]);
+ assert.deepEqual(submissionErrors({...profile,businessNotRegistered:true,businessIndustry:'',registrationIdType:'',taxId:''},config),[]);
+ assert.ok(stepErrors(1,{...profile,businessNotRegistered:false,businessIndustry:'',registrationIdType:''},config).length);
  assert.deepEqual(stepErrors(1,{...profile,businessNotRegistered:true,registrationIdType:'Not registered'},config),[]);
 
  const saved=normalizeOnboarding(JSON.parse(JSON.stringify(profile)));

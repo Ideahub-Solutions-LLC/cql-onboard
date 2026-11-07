@@ -18,7 +18,7 @@ Object.assign(d,{reviewAccuracy:true,reviewAuthority:true,reviewUsage:true,signa
 check('essential-only onboarding submits without technical documents',(await api('applications/'+id+'/submit',client,{data:d,pricingVersion:config.pricingVersion})).status===200);
 const submitted=(await api('applications/'+id)).data;
 check('new submission is stored at step four with its pricing snapshot',submitted.step===3&&submitted.status==='submitted'&&submitted.pricingSnapshot.version===config.pricingVersion);
-check('submitted client cannot edit intake',(await api('applications/'+id,client,{data:d,step:3},'PUT')).status===409);
+check('submitted client can correct intake',(await api('applications/'+id,client,{data:d,step:3},'PUT')).status===200);
 const names=['Review onboarding','Create CQL / GHL sub-account','Verify A2P documents','Submit A2P brand & campaign','Connect domain & publish site','Configure email & verify DNS','Provision phone number','Configure calendar & test booking','Import contacts & map fields','Build & test follow-up automation','Configure AI receptionist (if selected)','Confirm rates & billing','Client review & launch'];
 const checklist=Object.fromEntries(names.map(n=>[n,'Complete']));
 check('launch remains blocked by deferred setup tasks',(await api('applications/'+id+'/team',owner,{status:'launched',checklist},'PUT')).status===400);

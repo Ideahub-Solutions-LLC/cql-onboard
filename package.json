@@ -14,6 +14,7 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "test": "node tests/database-batch.mjs && node tests/passwords.mjs && node tests/catalog.mjs && node tests/pricing.mjs && node tests/onboarding.mjs && node tests/platform-auth.mjs && node tests/client-access.mjs",
     "test:api": "node tests/platform-auth-api.mjs",
+    "test:pdf": "node tests/setup-brief.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "node scripts/migrate-local.mjs"
   },
@@ -31,6 +32,7 @@
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "jose": "^6.2.14",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.31.0",
     "next": "16.3.4",
     "next-themes": "^0.4.6",

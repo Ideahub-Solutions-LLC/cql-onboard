@@ -111,3 +111,93 @@ html,body,.shell,.workspace{background:#e5eef6}.topbar{background:#10273b;min-he
 .business-profile .required{color:#b42318;font-size:12px;font-weight:600;margin-left:5px;white-space:nowrap}.business-profile .business-regions legend .required{display:inline-block}
 
 .preference-card{padding:24px;border:1px solid #d2e1ed;border-radius:12px;background:#fbfdff;min-width:0}.preference-card .form-section:last-child{margin-bottom:0;padding-bottom:0;border-bottom:0}.preference-card .choices{margin:12px 0 24px}.preference-card .form-grid{margin-top:20px}.preference-card .required{color:#b42318;font-size:12px;margin-left:4px;white-space:nowrap}.conditional-preferences{margin-top:20px}.conditional-preferences>.field{margin-bottom:20px}.conditional-preferences>.check-field{margin-top:18px}.conditional-preferences>.note{margin-top:22px}@media(max-width:600px){.preference-card{padding:17px}}
+
+/* Consistent onboarding dropdowns, matching the client-provided reference. */
+.client-content .form-body .field select,
+.client-content .form-body .field input[list] {
+  min-height: 50px;
+  padding: 11px 18px;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #315976;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.client-content .form-body .field select:hover:not(:disabled),
+.client-content .form-body .field input[list]:hover:not(:disabled) {
+  border-color: #9dbbd5;
+}
+.client-content .form-body .field select:focus,
+.client-content .form-body .field select:open,
+.client-content .form-body .field input[list]:focus {
+  border-color: #4096ff !important;
+  box-shadow: 0 0 0 2px #4096ff14;
+}
+.client-content .form-body .field select:disabled,
+.client-content .form-body .field input[list]:disabled {
+  background-color: #f2f5f8;
+  border-color: #dfe5eb;
+  color: #8798a8;
+  cursor: not-allowed;
+}
+.client-content .form-body .field select option {
+  background: #fff;
+  color: #315976;
+  font: inherit;
+}
+/* Keep native select behavior as the fallback in older browsers. */
+@supports (appearance: base-select) {
+  .client-content .form-body .field select,
+  .client-content .form-body .field select::picker(select) {
+    appearance: base-select;
+  }
+  .client-content .form-body .field select {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .client-content .form-body .field select::picker-icon {
+    content: '';
+    width: 6px;
+    height: 6px;
+    margin-right: 3px;
+    margin-top: -3px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    color: #315976;
+  }
+  .client-content .form-body .field select::picker(select) {
+    width: anchor-size(width);
+    max-width: calc(100vw - 32px);
+    max-height: min(320px, 50dvh);
+    margin: 0;
+    padding: 0;
+    border: 1px solid #808080;
+    border-radius: 0;
+    background: #fff;
+    box-shadow: none;
+    overflow-y: auto;
+  }
+  .client-content .form-body .field select option {
+    min-height: 29px;
+    padding: 3px 18px;
+    border: 0;
+    border-radius: 0;
+    font-size: 15px;
+    line-height: 1.5;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .client-content .form-body .field select option::checkmark {
+    display: none;
+  }
+  .client-content .form-body .field select option:is(:checked, :hover, :focus) {
+    background: #1967d2;
+    color: #fff;
+  }
+}
+
+.onboarding-summary{border:1px solid #d3e2ee;border-radius:10px;background:white;min-width:0;overflow:hidden}.onboarding-summary>summary{display:flex;align-items:center;justify-content:space-between;gap:16px;list-style:none;padding:20px;cursor:pointer;color:#2b506d;font-size:16px}.onboarding-summary>summary::-webkit-details-marker{display:none}.onboarding-summary>summary svg{flex-shrink:0;color:var(--accent);transition:transform .18s ease}.onboarding-summary[open]>summary svg{transform:rotate(90deg)}.onboarding-summary>summary:hover{background:#f0f7fd}.onboarding-summary>summary:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}.onboarding-summary-body{padding:0 20px 20px;border-top:1px solid #e2ebf2}.onboarding-summary-body dl>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:18px;padding:12px 0;border-bottom:1px solid #e8eef3;font-size:14px;line-height:1.7}.onboarding-summary-body dt{font-weight:600;color:#536e84}.onboarding-summary-body dd{margin:0;color:#2b506d;white-space:pre-wrap;overflow-wrap:anywhere}.onboarding-summary-files{margin-top:16px;font-size:14px;overflow-wrap:anywhere}.onboarding-summary-files ul{padding-left:20px;margin-top:8px}@media(max-width:550px){.onboarding-summary>summary{padding:17px}.onboarding-summary-body{padding:0 17px 17px}.onboarding-summary-body dl>div{grid-template-columns:1fr;gap:3px}}
