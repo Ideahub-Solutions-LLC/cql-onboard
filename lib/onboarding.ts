@@ -1,3 +1,4 @@
+import {BRANDING_STEP,REVIEW_STEP,brandColors,colorHex} from './branding.mjs';
 import type {SignupOption} from './catalog';
 
 export type Answers=Record<string,unknown>;
@@ -7,11 +8,12 @@ export const steps=[
  {title:'Your account',subtitle:'New or existing account',heading:'Let’s start with your CQL account.',description:'Already with CQL? Use your existing account. New here? Choose a subscription and complete signup in the popup.'},
  {title:'Your business',subtitle:'Just the essentials',heading:'Tell us the basics.',description:'A few details so your setup specialist can get started. You can leave the technical work to us.'},
  {title:'Your setup',subtitle:'Choose what you need',heading:'What would you like help with?',description:'Choose your services, or let your specialist recommend a setup. Detailed settings and documents can come later.'},
- {title:'Review & send',subtitle:'We’ll take it from here',heading:'Ready for your setup team.',description:'Check your details and send your brief. Your specialist will follow up on anything still needed before launch.'}
+ {title:'Review & send',subtitle:'We’ll take it from here',heading:'Ready for your setup team.',description:'Check your details and send your brief. Your specialist will follow up on anything still needed before launch.'},
+ {title:'Branding',subtitle:'Colors & logos',heading:'Make it your brand.',description:'Share your brand colors and upload your logos so your setup team can create a consistent look.'}
 ];
 // Temporarily pause setup choices while retaining their saved answers and stable step IDs.
 export const setupStepEnabled=false;
-export const activeStepIndices=[0,1,...(setupStepEnabled?[2]:[]),3];
+export const activeStepIndices=[0,1,...(setupStepEnabled?[2]:[]),BRANDING_STEP,REVIEW_STEP];
 export const setupServices=['Website / landing page','Business email','Phone & SMS','Booking calendar','Follow-up automation','Contact import','AI receptionist'];
 export const initialData:Answers={flowVersion:FLOW_VERSION,completedSteps:[],requestedFeatures:[],signupId:'',signupDone:false,alreadyHaveAccount:false,plan:'',setupMode:'Help me choose',launchTasks:[],country:'United States',brandType:'Registered business',domainStatus:'Help me decide',domainAccess:'Later with my setup team',siteType:'Landing page',numberType:'New local number',phoneCountry:'United States',differentRoutingPhone:false,differentCalendarOwner:false,differentRepresentative:false,customizeCalendar:false,provideVerificationNow:false,timezone:'',duration:'30',buffer:'15',notice:'24',days:['Monday','Tuesday','Wednesday','Thursday','Friday'],startTime:'09:00',endTime:'17:00',meetingType:'Video call',calendarProvider:'Google Calendar',importMode:'Later with my setup team',sopMode:'Build a playbook for me',channels:['Email','SMS'],cadence:'Immediately, 1 day, 3 days, 7 days',tone:'Friendly & professional',sendingWindow:'Confirm with my setup team',aiMode:'Discuss with my setup team',aiBilling:'AI Pay-Per-Use',aiLanguage:'English'};
 export const answer=(d:Answers,key:string)=>typeof d[key]==='string'?(d[key] as string).trim():'';
@@ -49,6 +51,7 @@ export function normalizeOnboarding(raw:Answers):Answers{
 }
 export function requiredFields(d:Answers):[number,string,string][]{
  const fields:[number,string,string][]=[[1,'legalName','Business name'],[1,'contactName','Your name'],[1,'contactEmail','Contact email'],[1,'contactPhone','Contact phone']];
+ for(const color of brandColors)if(color.required)fields.push([BRANDING_STEP,color.name,color.label]);
  if(d.businessProfileVersion===1)fields.push([1,'representativeFirstName','Representative first name'],[1,'timezone','Time zone']);
  if(hasService(d,'Phone & SMS')&&d.numberType==='Port an existing number')fields.push([2,'existingNumber','Number to transfer']);
  if(hasService(d,'Phone & SMS')&&d.differentRoutingPhone)fields.push([2,'routingPhone','Call forwarding number']);
@@ -70,6 +73,7 @@ export function stepErrors(step:number,d:Answers,config:Config):string[]{
   if(answer(d,'website')){try{const url=new URL(answer(d,'website'));if(!['https:','http:'].includes(url.protocol)||url.username||url.password)throw new Error();}catch{errors.push('Enter a valid business website beginning with https:// or http://.');}}
   if(answer(d,'timezone')){try{new Intl.DateTimeFormat('en',{timeZone:answer(d,'timezone')});}catch{errors.push('Choose a valid time zone.');}}
  }
+ if(step===BRANDING_STEP){for(const color of brandColors){const value=answer(d,color.name);if(value&&!colorHex(value))errors.push('Enter a valid Hex or RGB value for '+color.label+'.');}}
  if(step===2){
   if(!['Help me choose','Choose my services'].includes(answer(d,'setupMode')))errors.push('Choose how you would like to plan your setup.');
   if(d.setupMode==='Choose my services'&&(!list(d,'launchTasks').length||list(d,'launchTasks').some(s=>!setupServices.includes(s))))errors.push('Choose at least one service, or let your specialist help you choose.');
@@ -81,7 +85,7 @@ export function stepErrors(step:number,d:Answers,config:Config):string[]{
 }
 export function submissionErrors(d:Answers,config:Config){const errors=activeStepIndices.flatMap(i=>stepErrors(i,d,config));if(!d.reviewAccuracy||!d.reviewUsage||!d.reviewAuthority||!answer(d,'signature'))errors.push('Complete the acknowledgments and type your name.');return errors;}
 export function unlockedStep(d:Answers,config:Config){let position=0;while(position<activeStepIndices.length-1&&list(d,'completedSteps').includes(String(activeStepIndices[position]))&&!stepErrors(activeStepIndices[position],d,config).length)position++;return activeStepIndices[position];}
-export function resumeStep(raw:Answers,storedStep:number,config:Config){const mapped=raw.flowVersion===FLOW_VERSION?storedStep:storedStep===0?0:storedStep===1?1:storedStep===7?3:2;return Math.max(0,Math.min(!setupStepEnabled&&mapped===2?3:mapped,unlockedStep(normalizeOnboarding(raw),config)));}
+export function resumeStep(raw:Answers,storedStep:number,config:Config){const mapped=raw.flowVersion===FLOW_VERSION?storedStep:storedStep===0?0:storedStep===1?1:storedStep===7?3:2;return activeStepIndices[Math.max(0,Math.min(activeStepIndices.indexOf(!setupStepEnabled&&mapped===2?BRANDING_STEP:mapped),activeStepIndices.indexOf(unlockedStep(normalizeOnboarding(raw),config))))];}
 export function deferredSetupItems(d:Answers):string[]{
  if(d.flowVersion!==FLOW_VERSION)return [];
  if(d.setupMode==='Help me choose')return ['Confirm services and setup scope','Collect technical settings and account access'];

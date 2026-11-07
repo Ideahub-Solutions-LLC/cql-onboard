@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import {activeStepIndices,steps,initialData,normalizeOnboarding,submissionErrors,stepErrors,requiredFields,unlockedStep,resumeStep,deferredSetupItems,onboardingTasks} from '../lib/onboarding.ts';
+import {BRANDING_STEP,colorHex,colorRgb} from '../lib/branding.mjs';
 import {signupDefaults} from '../lib/catalog.ts';
 const config={signupOptions:signupDefaults};
-const brief=()=>normalizeOnboarding({...initialData,alreadyHaveAccount:true,signupDone:true,legalName:'Synthetic Services',services:'Home cleaning',contactName:'Test Client',contactEmail:'client@example.test',contactPhone:'+15555550100',reviewAccuracy:true,reviewAuthority:true,reviewUsage:true,signature:'Test Client'});
+const brief=()=>normalizeOnboarding({...initialData,alreadyHaveAccount:true,signupDone:true,primaryColor1:'#1677D2',secondaryColor1:'#FFCC00',legalName:'Synthetic Services',services:'Home cleaning',contactName:'Test Client',contactEmail:'client@example.test',contactPhone:'+15555550100',reviewAccuracy:true,reviewAuthority:true,reviewUsage:true,signature:'Test Client'});
 let count=0;const check=(name,fn)=>{fn();count++;console.log('PASS '+name);};
-check('three active steps retain stable IDs and four required business details',()=>{assert.deepEqual(activeStepIndices,[0,1,3]);assert.equal(steps[activeStepIndices[2]].title,'Review & send');assert.equal(requiredFields(brief()).length,4);});
+check('four active steps include branding before review',()=>{assert.deepEqual(activeStepIndices,[0,1,4,3]);assert.equal(steps[activeStepIndices[2]].title,'Branding');assert.equal(requiredFields(brief()).length,6);});
 check('essential brief can submit without domain, EIN, calendar, SOP, or AI settings',()=>assert.deepEqual(submissionErrors(brief(),config),[]));
 check('each core business detail is still required',()=>{for(const [,key] of requiredFields(brief()))assert.ok(submissionErrors({...brief(),[key]:''},config).length);});
 check('contact email syntax is validated',()=>assert.match(submissionErrors({...brief(),contactEmail:'bad'},config).join(),/valid contact email/));
@@ -21,14 +22,14 @@ check('opting into verification now requires the details and a valid EIN',()=>{c
 check('optional calendar customization requires timezone and valid hours',()=>{const d={...brief(),setupMode:'Choose my services',launchTasks:['Booking calendar'],customizeCalendar:true,timezone:'',startTime:'17:00',endTime:'09:00'};assert.match(stepErrors(2,d,config).join(),/business timezone/);assert.match(stepErrors(2,d,config).join(),/end time/);});
 check('contact permission is required for selected imports now',()=>{const d={...brief(),setupMode:'Choose my services',launchTasks:['Contact import'],importMode:'I have contacts to import'};assert.match(stepErrors(2,d,config).join(),/permission/);assert.deepEqual(stepErrors(2,{...d,importConsent:true},config),[]);assert.deepEqual(stepErrors(2,{...d,importMode:'Later with my setup team'},config),[]);});
 check('legacy draft answers and credentials metadata are preserved',()=>{const d=normalizeOnboarding({...brief(),flowVersion:2,completedSteps:['0','1','2','3','4','5','6'],domain:'old.example.test',accessNotes:'Existing invitation',generatedSop:'Existing draft',routingPhone:'+15555550999'});assert.equal(d.domain,'old.example.test');assert.equal(d.accessNotes,'Existing invitation');assert.equal(d.generatedSop,'Existing draft');assert.equal(d.routingPhone,'+15555550999');assert.deepEqual(d.completedSteps,['0','1','2']);});
-check('legacy review step maps to the new review',()=>{const d={...brief(),flowVersion:2,completedSteps:['0','1','2','3','4','5','6']};assert.equal(resumeStep(d,7,config),3);});
+check('legacy review step maps to the new review',()=>{const d={...brief(),flowVersion:2,completedSteps:['0','1','2','3','4','5','6']};assert.equal(resumeStep(d,7,config),BRANDING_STEP);});
 check('incomplete migrated business details cannot unlock setup',()=>{const d=normalizeOnboarding({...brief(),flowVersion:2,legalName:'',completedSteps:['0','1','2','3','4','5','6']});assert.equal(unlockedStep(d,config),1);});
-check('new drafts unlock sequentially',()=>{const d=brief();assert.equal(unlockedStep(d,config),0);assert.equal(unlockedStep({...d,completedSteps:['0']},config),1);assert.equal(unlockedStep({...d,completedSteps:['0','1','2']},config),3);});
-check('business completion unlocks review without completing hidden setup',()=>{
+check('new drafts unlock sequentially',()=>{const d=brief();assert.equal(unlockedStep(d,config),0);assert.equal(unlockedStep({...d,completedSteps:['0']},config),1);assert.equal(unlockedStep({...d,completedSteps:['0','1','2']},config),BRANDING_STEP);});
+check('business completion unlocks branding without completing hidden setup',()=>{
  const d={...brief(),completedSteps:['0','1']};
- assert.equal(unlockedStep(d,config),3);
- assert.equal(resumeStep(d,2,config),3);
- assert.equal(resumeStep(d,3,config),3);
+ assert.equal(unlockedStep(d,config),BRANDING_STEP);
+ assert.equal(resumeStep(d,2,config),BRANDING_STEP);
+ assert.equal(resumeStep(d,3,config),BRANDING_STEP);
  assert.equal(resumeStep({...d,contactEmail:''},2,config),1);
 });
 check('hidden setup requirements do not block sending a brief or erase saved answers',()=>{
@@ -57,5 +58,21 @@ check('tabbed business profile preserves independent representative details and 
  assert.ok(stepErrors(1,{...profile,representativeEmail:'invalid'},config).some(error=>/representative email/.test(error)));
  assert.ok(stepErrors(1,{...profile,website:'javascript:alert(1)'},config).some(error=>/website/.test(error)));
  assert.deepEqual(submissionErrors({...profile,services:'',businessNotRegistered:true,taxId:''},config),[]);
+});
+check('branding requires two main colors and validates optional colors',()=>{
+ const d=brief();
+ assert.deepEqual(stepErrors(BRANDING_STEP,d,config),[]);
+ for(const name of ['primaryColor1','secondaryColor1'])assert.ok(stepErrors(BRANDING_STEP,{...d,[name]:''},config).length);
+ for(const name of ['primaryColor2','primaryColor3','secondaryColor2','secondaryColor3']){
+  assert.deepEqual(stepErrors(BRANDING_STEP,{...d,[name]:''},config),[]);
+  assert.ok(stepErrors(BRANDING_STEP,{...d,[name]:'invalid'},config).length);
+ }
+ assert.equal(colorHex('#abc'),'#AABBCC');assert.equal(colorHex('rgb(255, 0, 22)'),'#FF0016');
+ assert.equal(colorHex('255, 0, 22'),'#FF0016');assert.equal(colorRgb('#FF0016'),'255, 0, 22');
+ for(const value of ['rgb(256,0,0)','-1,0,0','#12345','rgb(1,2,3','1,2,3)'])assert.equal(colorHex(value),null);
+ assert.equal(unlockedStep({...d,completedSteps:['0','1','4']},config),3);
+ assert.equal(resumeStep({...d,completedSteps:['0','1','4']},3,config),3);
+ assert.equal(unlockedStep({...d,primaryColor1:'',completedSteps:['0','1','4']},config),BRANDING_STEP);
+ assert.ok(submissionErrors({...d,secondaryColor1:''},config).length);
 });
 console.log(`${count} onboarding checks passed.`);

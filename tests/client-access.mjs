@@ -144,6 +144,28 @@ const alphaFile = await api(`applications/${alpha.data.id}/files`, {cookie: alph
 assert.equal(alphaFile.status, 201);
 assert.equal((await api('files/' + alphaFile.data.id, {cookie: alphaCookie})).status, 200);
 assert.equal((await api('files/' + alphaFile.data.id, {cookie: betaCookie})).status, 403);
+// Branding uses the same owner checks as existing private files.
+const pngBytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j5xkAAAAASUVORK5CYII=', 'base64');
+const logoUpload = new FormData(); logoUpload.append('category', 'Logo Square/Portrait'); logoUpload.append('file', new Blob([pngBytes], {type:'image/png'}), 'synthetic-logo.png');
+const logo = await api(`applications/${alpha.data.id}/files`, {cookie:alphaCookie,body:logoUpload});
+assert.equal(logo.status,201);
+const logoPreview = await routes.GET(new Request(base + '/api/files/' + logo.data.id + '?preview=1', {headers:{Cookie:alphaCookie}}));
+assert.equal(logoPreview.status,200); assert.equal(logoPreview.headers.get('content-type'),'image/png');
+assert.equal(logoPreview.headers.get('content-disposition'),'inline');
+assert.deepEqual(Buffer.from(await logoPreview.arrayBuffer()),pngBytes);
+assert.equal((await api('files/'+logo.data.id+'?preview=1',{cookie:betaCookie})).status,403);
+assert.equal((await api('files/'+logo.data.id+'?preview=1')).status,401);
+const fakeLogo = new FormData(); fakeLogo.append('category','Logo Landscape'); fakeLogo.append('file',new Blob(['<script>bad</script>'],{type:'image/png'}),'fake.png');
+assert.equal((await api(`applications/${alpha.data.id}/files`,{cookie:alphaCookie,body:fakeLogo})).status,400);
+const brandingData={...savedData,alreadyHaveAccount:true,signupDone:true,legalName:'Synthetic brand',contactName:'Test Client',contactPhone:'+15555550100',completedSteps:['0','1'],primaryColor1:'#1677D2',secondaryColor1:'255, 204, 0'};
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:brandingData,step:4}})).status,200);
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:brandingData,step:3}})).status,409,'branding must be completed before review');
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,primaryColor1:'invalid',completedSteps:['0','1','4']},step:3}})).status,409);
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,completedSteps:['0','1','4']},step:3}})).status,200);
+const reloadedBranding=await api(`applications/${alpha.data.id}`,{cookie:alphaCookie});
+assert.equal(reloadedBranding.data.data.primaryColor1,'#1677D2'); assert.equal(reloadedBranding.data.data.secondaryColor1,'255, 204, 0');
+assert.ok(reloadedBranding.data.files.some(file=>file.id===logo.data.id));
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:savedData,step:0}})).status,200);
 assert.equal((await api(`applications/${alpha.data.id}/secret`, {cookie: alphaCookie})).status, 403);
 assert.equal((await api('price-lists', {cookie: alphaCookie, body: ownUpload})).status, 403);
 await api(`applications/${alpha.data.id}/team`, {cookie: admin, method: 'PUT', body: {status: 'submitted', checklist: {}}});

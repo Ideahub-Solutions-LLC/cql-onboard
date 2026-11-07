@@ -3,6 +3,8 @@ import React,{useContext} from 'react';
 import {Field,CheckField,Choices,Multi,Section,Note,Upload,FeeMenu,FormContext} from './form-parts';
 import {ArrowRight,FileDown,Clock3} from 'lucide-react';
 import SignupStep from './signup-step';
+import BrandingStep from './branding-step';
+import {BRANDING_STEP,brandColors,colorRgb} from '../lib/branding.mjs';
 import BusinessProfile from './business-profile';
 import {deferredSetupItems,missingFields} from '../lib/shared';
 import {activeStepIndices,setupStepEnabled,setupServices,hasService} from '../lib/onboarding';
@@ -68,9 +70,10 @@ export default function StepContent({step,config,exportBrief,jump}:any){
     </Section>}
    </>}
   </>}
+  {step===BRANDING_STEP&&<BrandingStep/>}
   {step===3&&<>
    <div className="quick-review-grid">
-    {[['Your account',data.plan||'Account confirmation needed',0],['Your business',[data.legalName,data.services,data.contactName,data.contactEmail,data.contactPhone].filter(Boolean).join(' · '),1],['Your setup',data.setupMode==='Help me choose'?'Your specialist will recommend the right setup.':(data.launchTasks||[]).join(' · '),2]].filter(([, ,index])=>activeStepIndices.includes(Number(index))).map(([title,value,index])=><button type="button" className="quick-review-card" key={String(title)} onClick={()=>jump(Number(index))}><div><strong>{title}</strong><p>{value}</p></div><span>Edit <ArrowRight size={15}/></span></button>)}
+    {[['Your account',data.plan||'Account confirmation needed',0],['Your business',[data.legalName,data.services,data.contactName,data.contactEmail,data.contactPhone].filter(Boolean).join(' · '),1],['Your setup',data.setupMode==='Help me choose'?'Your specialist will recommend the right setup.':(data.launchTasks||[]).join(' · '),2],['Branding',brandColors.filter(color=>data[color.name]).map(color=>color.label+': '+data[color.name]+' (RGB '+colorRgb(data[color.name])+')').join(' · '),BRANDING_STEP]].filter(([, ,index])=>activeStepIndices.includes(Number(index))).map(([title,value,index])=><button type="button" className="quick-review-card" key={String(title)} onClick={()=>jump(Number(index))}><div><strong>{title}</strong><p>{value}</p></div><span>Edit <ArrowRight size={15}/></span></button>)}
    </div>
    {missingFields(data).filter(([index])=>activeStepIndices.includes(index)).length>0&&<Note>There are {missingFields(data).filter(([index])=>activeStepIndices.includes(index)).length} required details to complete. Select Edit above to add them.</Note>}
    {!!later.length&&<div className="specialist-handoff"><Clock3 size={22}/><div><h3>With your setup specialist</h3><p>You can send this brief now. Your team will follow up on:</p><ul>{later.map(item=><li key={item}>{item}</li>)}</ul><p>These items still need to be resolved before the relevant services go live.</p></div></div>}

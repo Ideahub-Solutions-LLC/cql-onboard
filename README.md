@@ -3,7 +3,7 @@
 A private, persistent client onboarding app for Core Quantum Leads.
 
 ## Included
-- Three-step client intake: account, business essentials, and review. Setup choices are temporarily hidden; existing setup answers are retained. Step 2 collects general information, business information, physical address, and authorized representative details in four tabs. Clients can send a brief without completing every launch detail. Conditional preferences, draft saving, required-field checks, and client-specific applications are included.
+- Four-step client intake: account, business essentials, branding, and review. Branding collects three primary and three secondary colors (the first of each is required), with synchronized picker/Hex/RGB controls, and optional square/portrait and landscape logos with private previews. Setup choices are temporarily hidden; existing setup answers are retained. Step 2 collects general information, business information, physical address, and authorized representative details in four tabs. Clients can send a brief without completing every launch detail. Conditional preferences, draft saving, required-field checks, and client-specific applications are included.
 - Optional A2P details and uploads, domain/email, phone and calendar preferences, contact uploads, follow-up and AI requests, and pricing acknowledgment. Unfinished setup discovery becomes explicit team follow-up checklist work.
 - D1-backed records and private R2 attachments, with authorization on each API operation.
 - Existing domain credentials remain in the AES-GCM vault for authorized team access and deletion. The administrator arranges client access with a specialist. VAULT_KEY is a 32-byte base64 runtime secret, kept out of source and form exports.
