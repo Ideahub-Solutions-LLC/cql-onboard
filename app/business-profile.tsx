@@ -81,6 +81,6 @@ export default function BusinessProfile() {
         <Field name="representativePhone" required label="Phone Number (With Country Code)" type="tel" wide/>
       </div>
     </Section></Tabs.Content>
-    <div className="business-tab-footer"><span>Use Save draft to save your details at any time.</span>{Number(tab) > 0 && <button type="button" className="btn secondary" onClick={() => setTab(String(Number(tab) - 1))}>Previous tab</button>}{Number(tab) < 3 && <button type="button" className="btn secondary" onClick={() => setTab(String(Number(tab) + 1))}>Next tab</button>}</div>
+
   </Tabs.Root></FormContext.Provider>;
 }

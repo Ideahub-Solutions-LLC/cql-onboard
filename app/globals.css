@@ -109,3 +109,5 @@ html,body,.shell,.workspace{background:#e5eef6}.topbar{background:#10273b;min-he
 .domain-email-card{padding:24px;border:1px solid #d2e1ed;border-radius:12px;background:#fbfdff;min-width:0}.domain-email-card .form-section{margin:0;padding:0;border:0}.domain-email-card .note{margin-top:20px}@media(max-width:600px){.domain-email-card{padding:17px}}
 
 .business-profile .required{color:#b42318;font-size:12px;font-weight:600;margin-left:5px;white-space:nowrap}.business-profile .business-regions legend .required{display:inline-block}
+
+.preference-card{padding:24px;border:1px solid #d2e1ed;border-radius:12px;background:#fbfdff;min-width:0}.preference-card .form-section:last-child{margin-bottom:0;padding-bottom:0;border-bottom:0}.preference-card .choices{margin:12px 0 24px}.preference-card .form-grid{margin-top:20px}.preference-card .required{color:#b42318;font-size:12px;margin-left:4px;white-space:nowrap}.conditional-preferences{margin-top:20px}.conditional-preferences>.field{margin-bottom:20px}.conditional-preferences>.check-field{margin-top:18px}.conditional-preferences>.note{margin-top:22px}@media(max-width:600px){.preference-card{padding:17px}}

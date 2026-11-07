@@ -1,13 +1,14 @@
+import {PHONE_CALENDAR_STEP,CONTACTS_FOLLOWUP_STEP,AI_RECEPTIONIST_STEP,aiOptions} from '../lib/setup-preferences.mjs';
 import assert from 'node:assert/strict';
 import {activeStepIndices,steps,initialData,normalizeOnboarding,submissionErrors,stepErrors,requiredFields,unlockedStep,resumeStep,deferredSetupItems,onboardingTasks} from '../lib/onboarding.ts';
 import {BRANDING_STEP,colorHex,colorRgb} from '../lib/branding.mjs';
 import {DOMAIN_EMAIL_STEP,validDomainName} from '../lib/domain-email.mjs';
 import {signupDefaults} from '../lib/catalog.ts';
 const config={signupOptions:signupDefaults};
-const brief=()=>normalizeOnboarding({...initialData,alreadyHaveAccount:true,signupDone:true,domain:'synthetic.example',domainProvider:'Example registrar',businessEmailProvider:'Example mail',emailSetupPreference:'Set up new email',preferredAccessMethod:'Provider invitation (recommended)',primaryColor1:'#1677D2',secondaryColor1:'#FFCC00',legalName:'Synthetic Services',services:'Home cleaning',contactName:'Test Client',contactEmail:'client@example.test',contactPhone:'+15555550100',reviewAccuracy:true,reviewAuthority:true,reviewUsage:true,signature:'Test Client'});
+const brief=()=>normalizeOnboarding({...initialData,alreadyHaveAccount:true,signupDone:true,phonePreference:'New local number',calendarAppointmentOwner:'Test Client',availabilityDays:'Monday-Friday',availabilityHours:'9 AM-5 PM',contactsPreference:'Not yet',followupPlaybookPreference:'No',followupGoal:'Book appointments',followupFrequency:'Within one business day',aiReceptionistPreference:'Not right now',domain:'synthetic.example',domainProvider:'Example registrar',businessEmailProvider:'Example mail',emailSetupPreference:'Set up new email',preferredAccessMethod:'Provider invitation (recommended)',primaryColor1:'#1677D2',secondaryColor1:'#FFCC00',legalName:'Synthetic Services',services:'Home cleaning',contactName:'Test Client',contactEmail:'client@example.test',contactPhone:'+15555550100',reviewAccuracy:true,reviewAuthority:true,reviewUsage:true,signature:'Test Client'});
 let count=0;const check=(name,fn)=>{fn();count++;console.log('PASS '+name);};
-check('five active steps include domain and email before review',()=>{assert.deepEqual(activeStepIndices,[0,1,4,5,3]);assert.equal(steps[activeStepIndices[2]].title,'Branding');assert.equal(requiredFields(brief()).length,11);});
-check('essential brief can submit without EIN, calendar, SOP, or AI settings',()=>assert.deepEqual(submissionErrors(brief(),config),[]));
+check('eight active steps finish with review',()=>{assert.deepEqual(activeStepIndices,[0,1,4,5,6,7,8,3]);assert.equal(steps[activeStepIndices[2]].title,'Branding');assert.equal(requiredFields(brief()).length,20);});
+check('essential brief can submit without EIN, SOP, optional calendar settings, or AI details',()=>assert.deepEqual(submissionErrors(brief(),config),[]));
 check('each required client detail is still enforced',()=>{for(const [,key] of requiredFields(brief()))assert.ok(submissionErrors({...brief(),[key]:''},config).length);});
 check('contact email syntax is validated',()=>assert.match(submissionErrors({...brief(),contactEmail:'bad'},config).join(),/valid contact email/));
 check('all acknowledgments and signature remain explicit',()=>{for(const key of ['reviewAccuracy','reviewAuthority','reviewUsage','signature'])assert.ok(submissionErrors({...brief(),[key]:''},config).length);});
@@ -86,7 +87,7 @@ check('branding requires two main colors and validates optional colors',()=>{
  assert.ok(submissionErrors({...d,secondaryColor1:''},config).length);
 });
 check('domain and email fields gate review and preserve optional instructions',()=>{
- const d={...brief(),completedSteps:['0','1','4','5'],accessNotes:'Invite the setup specialist using the provider portal.'};
+ const d={...brief(),completedSteps:['0','1','4','5','6','7','8'],accessNotes:'Invite the setup specialist using the provider portal.'};
  assert.deepEqual(stepErrors(DOMAIN_EMAIL_STEP,d,config),[]);
  assert.equal(unlockedStep(d,config),3);
  assert.equal(resumeStep(d,3,config),3);
@@ -101,5 +102,37 @@ check('domain and email fields gate review and preserve optional instructions',(
  assert.ok(stepErrors(DOMAIN_EMAIL_STEP,{...d,preferredAccessMethod:'invalid'},config).length);
  assert.deepEqual(stepErrors(DOMAIN_EMAIL_STEP,{...d,accessNotes:''},config),[]);
  assert.equal(normalizeOnboarding(JSON.parse(JSON.stringify(d))).accessNotes,d.accessNotes);
+});
+check('phone and calendar require essential preferences but optional settings stay optional',()=>{
+ const d=brief();assert.deepEqual(stepErrors(PHONE_CALENDAR_STEP,d,config),[]);
+ for(const name of ['phonePreference','calendarAppointmentOwner','availabilityDays','availabilityHours'])assert.ok(stepErrors(PHONE_CALENDAR_STEP,{...d,[name]:''},config).length);
+ for(const name of ['appointmentDuration','bookingBuffer','bookingNotice']){
+  assert.deepEqual(stepErrors(PHONE_CALENDAR_STEP,{...d,[name]:''},config),[]);
+  assert.ok(stepErrors(PHONE_CALENDAR_STEP,{...d,[name]:'invalid'},config).length);
+ }
+ assert.ok(stepErrors(PHONE_CALENDAR_STEP,{...d,phonePreference:'invalid'},config).length);
+});
+check('contacts require explicit permission only when the client has contacts',()=>{
+ const d=brief();assert.deepEqual(stepErrors(CONTACTS_FOLLOWUP_STEP,d,config),[]);
+ assert.ok(stepErrors(CONTACTS_FOLLOWUP_STEP,{...d,contactsPreference:'Yes, I have contacts'},config).length);
+ assert.deepEqual(stepErrors(CONTACTS_FOLLOWUP_STEP,{...d,contactsPreference:'Yes, I have contacts',contactImportPermission:true},config),[]);
+ assert.ok(stepErrors(CONTACTS_FOLLOWUP_STEP,{...d,contactsPreference:'Yes, I have contacts',contactImportPermission:'true'},config).length);
+ for(const name of ['contactsPreference','followupPlaybookPreference','followupGoal','followupFrequency'])assert.ok(stepErrors(CONTACTS_FOLLOWUP_STEP,{...d,[name]:''},config).length);
+ assert.ok(stepErrors(CONTACTS_FOLLOWUP_STEP,{...d,followupPlaybookPreference:'invalid'},config).length);
+});
+check('AI is optional but its opt-in decision is explicit; hidden details do not block declining',()=>{
+ const d=brief();assert.deepEqual(stepErrors(AI_RECEPTIONIST_STEP,d,config),[]);
+ assert.deepEqual(stepErrors(AI_RECEPTIONIST_STEP,{...d,aiReceptionistPreference:aiOptions[0]},config),[]);
+ assert.deepEqual(stepErrors(AI_RECEPTIONIST_STEP,{...d,aiToneOfVoice:'old unrecognized value'},config),[]);
+ assert.ok(stepErrors(AI_RECEPTIONIST_STEP,{...d,aiReceptionistPreference:''},config).length);
+ assert.ok(stepErrors(AI_RECEPTIONIST_STEP,{...d,aiReceptionistPreference:'invalid'},config).length);
+ assert.ok(stepErrors(AI_RECEPTIONIST_STEP,{...d,aiReceptionistPreference:aiOptions[0],aiToneOfVoice:'invalid'},config).length);
+ assert.equal(unlockedStep({...d,completedSteps:['0','1','4','5']},config),PHONE_CALENDAR_STEP);
+ assert.equal(unlockedStep({...d,completedSteps:['0','1','4','5','6']},config),CONTACTS_FOLLOWUP_STEP);
+ assert.equal(unlockedStep({...d,completedSteps:['0','1','4','5','6','7']},config),AI_RECEPTIONIST_STEP);
+ assert.equal(unlockedStep({...d,completedSteps:['0','1','4','5','6','7','8']},config),3);
+ assert.equal(resumeStep({...d,completedSteps:['0','1','4','5']},3,config),PHONE_CALENDAR_STEP);
+ const saved=normalizeOnboarding({...d,contactsPreference:'Not yet',contactListNotes:'Retained notes',aiReceptionistPreference:'Not right now',aiDiscussServices:'Retained services'});
+ assert.equal(saved.contactListNotes,'Retained notes');assert.equal(saved.aiDiscussServices,'Retained services');
 });
 console.log(`${count} onboarding checks passed.`);

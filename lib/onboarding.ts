@@ -1,3 +1,4 @@
+import {PHONE_CALENDAR_STEP,CONTACTS_FOLLOWUP_STEP,AI_RECEPTIONIST_STEP,phoneOptions,contactOptions,playbookOptions,aiOptions,durationOptions,bufferOptions,noticeOptions,voiceOptions} from './setup-preferences.mjs';
 import {DOMAIN_EMAIL_STEP,domainEmailFields,emailSetupOptions,accessMethodOptions,validDomainName} from './domain-email.mjs';
 import {BRANDING_STEP,REVIEW_STEP,brandColors,colorHex} from './branding.mjs';
 import type {SignupOption} from './catalog';
@@ -11,11 +12,14 @@ export const steps=[
  {title:'Your setup',subtitle:'Choose what you need',heading:'What would you like help with?',description:'Choose your services, or let your specialist recommend a setup. Detailed settings and documents can come later.'},
  {title:'Review & send',subtitle:'We’ll take it from here',heading:'Ready for your setup team.',description:'Check your details and send your brief. Your specialist will follow up on anything still needed before launch.'},
  {title:'Branding',subtitle:'Colors & logos',heading:'Make it your brand.',description:'Share your brand colors and upload your logos so your setup team can create a consistent look.'},
- {title:'Domain and Email Reference',subtitle:'Domain & email preferences',heading:'Domain and Email Reference',description:'Share your domain, email provider, and preferred way for your setup team to arrange access.'}
+ {title:'Domain and Email Reference',subtitle:'Domain & email preferences',heading:'Domain and Email Reference',description:'Share your domain, email provider, and preferred way for your setup team to arrange access.'},
+ {title:'Phone & calendar',subtitle:'Calls & booking availability',heading:'Phone & calendar',description:'Share your phone preferences and calendar availability.'},
+ {title:'Contacts & follow-up',subtitle:'Contacts & your playbook',heading:'Contacts & follow-up',description:'Tell us about your contacts and how you want your team to follow up.'},
+ {title:'AI receptionist',subtitle:'Optional AI assistance',heading:'AI receptionist',description:'Choose whether you would like to explore an AI receptionist and share any preferences.'}
 ];
 // Temporarily pause setup choices while retaining their saved answers and stable step IDs.
 export const setupStepEnabled=false;
-export const activeStepIndices=[0,1,...(setupStepEnabled?[2]:[]),BRANDING_STEP,DOMAIN_EMAIL_STEP,REVIEW_STEP];
+export const activeStepIndices=[0,1,...(setupStepEnabled?[2]:[]),BRANDING_STEP,DOMAIN_EMAIL_STEP,PHONE_CALENDAR_STEP,CONTACTS_FOLLOWUP_STEP,AI_RECEPTIONIST_STEP,REVIEW_STEP];
 export const setupServices=['Website / landing page','Business email','Phone & SMS','Booking calendar','Follow-up automation','Contact import','AI receptionist'];
 export const initialData:Answers={flowVersion:FLOW_VERSION,completedSteps:[],requestedFeatures:[],signupId:'',signupDone:false,alreadyHaveAccount:false,plan:'',setupMode:'Help me choose',launchTasks:[],country:'United States',brandType:'Registered business',domainStatus:'Help me decide',domainAccess:'Later with my setup team',siteType:'Landing page',numberType:'New local number',phoneCountry:'United States',differentRoutingPhone:false,differentCalendarOwner:false,differentRepresentative:false,customizeCalendar:false,provideVerificationNow:false,timezone:'',duration:'30',buffer:'15',notice:'24',days:['Monday','Tuesday','Wednesday','Thursday','Friday'],startTime:'09:00',endTime:'17:00',meetingType:'Video call',calendarProvider:'Google Calendar',importMode:'Later with my setup team',sopMode:'Build a playbook for me',channels:['Email','SMS'],cadence:'Immediately, 1 day, 3 days, 7 days',tone:'Friendly & professional',sendingWindow:'Confirm with my setup team',aiMode:'Discuss with my setup team',aiBilling:'AI Pay-Per-Use',aiLanguage:'English'};
 export const answer=(d:Answers,key:string)=>typeof d[key]==='string'?(d[key] as string).trim():'';
@@ -53,6 +57,7 @@ export function normalizeOnboarding(raw:Answers):Answers{
 }
 export function requiredFields(d:Answers):[number,string,string][]{
  const fields:[number,string,string][]=[[1,'legalName','Business name'],[1,'contactName','Your name'],[1,'contactEmail','Contact email'],[1,'contactPhone','Contact phone']];
+ fields.push([PHONE_CALENDAR_STEP,'phonePreference','Phone preference'],[PHONE_CALENDAR_STEP,'calendarAppointmentOwner','Calendar owner'],[PHONE_CALENDAR_STEP,'availabilityDays','Business days'],[PHONE_CALENDAR_STEP,'availabilityHours','Business hours'],[CONTACTS_FOLLOWUP_STEP,'contactsPreference','Contact preference'],[CONTACTS_FOLLOWUP_STEP,'followupPlaybookPreference','Follow-up playbook preference'],[CONTACTS_FOLLOWUP_STEP,'followupGoal','Follow-up goal'],[CONTACTS_FOLLOWUP_STEP,'followupFrequency','Follow-up frequency'],[AI_RECEPTIONIST_STEP,'aiReceptionistPreference','AI receptionist preference']);
  for(const [name,label] of domainEmailFields)fields.push([DOMAIN_EMAIL_STEP,name,label]);
  for(const color of brandColors)if(color.required)fields.push([BRANDING_STEP,color.name,color.label]);
  if(d.businessProfileVersion===1){
@@ -79,6 +84,19 @@ export function stepErrors(step:number,d:Answers,config:Config):string[]{
   if(answer(d,'representativeEmail')&&!validEmail(answer(d,'representativeEmail')))errors.push('Enter a valid representative email.');
   if(answer(d,'website')){try{const url=new URL(answer(d,'website'));if(!['https:','http:'].includes(url.protocol)||url.username||url.password)throw new Error();}catch{errors.push('Enter a valid business website beginning with https:// or http://.');}}
   if(answer(d,'timezone')){try{new Intl.DateTimeFormat('en',{timeZone:answer(d,'timezone')});}catch{errors.push('Choose a valid time zone.');}}
+ }
+ if(step===PHONE_CALENDAR_STEP){
+  if(answer(d,'phonePreference')&&!phoneOptions.includes(answer(d,'phonePreference')))errors.push('Choose an available phone preference.');
+  for(const [name,label,options] of [['appointmentDuration','appointment duration',durationOptions],['bookingBuffer','buffer between appointments',bufferOptions],['bookingNotice','minimum booking notice',noticeOptions]] as [string,string,string[]][]){if(answer(d,name)&&!options.includes(answer(d,name)))errors.push('Choose an available '+label+'.');}
+ }
+ if(step===CONTACTS_FOLLOWUP_STEP){
+  if(answer(d,'contactsPreference')&&!contactOptions.includes(answer(d,'contactsPreference')))errors.push('Choose whether you have contacts to import.');
+  if(answer(d,'followupPlaybookPreference')&&!playbookOptions.includes(answer(d,'followupPlaybookPreference')))errors.push('Choose whether you have an existing follow-up playbook.');
+  if(d.contactsPreference===contactOptions[0]&&d.contactImportPermission!==true)errors.push('Confirm permission to import and contact these contacts.');
+ }
+ if(step===AI_RECEPTIONIST_STEP){
+  if(answer(d,'aiReceptionistPreference')&&!aiOptions.includes(answer(d,'aiReceptionistPreference')))errors.push('Choose an available AI receptionist preference.');
+  if(d.aiReceptionistPreference===aiOptions[0]&&answer(d,'aiToneOfVoice')&&!voiceOptions.includes(answer(d,'aiToneOfVoice')))errors.push('Choose an available AI tone of voice.');
  }
  if(step===DOMAIN_EMAIL_STEP){
   if(answer(d,'domain')&&!validDomainName(answer(d,'domain')))errors.push('Enter a valid domain name such as yourcompany.com, without https:// or a page path.');

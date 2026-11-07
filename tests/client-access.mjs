@@ -157,17 +157,24 @@ assert.equal((await api('files/'+logo.data.id+'?preview=1',{cookie:betaCookie}))
 assert.equal((await api('files/'+logo.data.id+'?preview=1')).status,401);
 const fakeLogo = new FormData(); fakeLogo.append('category','Logo Landscape'); fakeLogo.append('file',new Blob(['<script>bad</script>'],{type:'image/png'}),'fake.png');
 assert.equal((await api(`applications/${alpha.data.id}/files`,{cookie:alphaCookie,body:fakeLogo})).status,400);
-const brandingData={...savedData,alreadyHaveAccount:true,signupDone:true,legalName:'Synthetic brand',contactName:'Test Client',contactPhone:'+15555550100',domain:'synthetic.example',domainProvider:'Test registrar',businessEmailProvider:'Test mail',emailSetupPreference:'Connect existing email',preferredAccessMethod:'Discuss with setup team',accessNotes:'Arrange a provider invitation',completedSteps:['0','1'],primaryColor1:'#1677D2',secondaryColor1:'255, 204, 0'};
+const brandingData={...savedData,phonePreference:'New local number',calendarAppointmentOwner:'Test Client',availabilityDays:'Monday-Friday',availabilityHours:'9 AM-5 PM',contactsPreference:'Not yet',followupPlaybookPreference:'No',followupGoal:'Book appointments',followupFrequency:'Within one business day',aiReceptionistPreference:'Not right now',alreadyHaveAccount:true,signupDone:true,legalName:'Synthetic brand',contactName:'Test Client',contactPhone:'+15555550100',domain:'synthetic.example',domainProvider:'Test registrar',businessEmailProvider:'Test mail',emailSetupPreference:'Connect existing email',preferredAccessMethod:'Discuss with setup team',accessNotes:'Arrange a provider invitation',completedSteps:['0','1'],primaryColor1:'#1677D2',secondaryColor1:'255, 204, 0'};
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:brandingData,step:4}})).status,200);
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:brandingData,step:3}})).status,409,'branding must be completed before review');
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,primaryColor1:'invalid',completedSteps:['0','1','4']},step:3}})).status,409);
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,completedSteps:['0','1','4']},step:5}})).status,200);
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,completedSteps:['0','1','4']},step:3}})).status,409,'domain and email must be completed before review');
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,domain:'invalid',completedSteps:['0','1','4','5']},step:3}})).status,409);
-assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,completedSteps:['0','1','4','5']},step:3}})).status,200);
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,completedSteps:['0','1','4','5','6','7','8']},step:3}})).status,200);
+const completePreferences={...brandingData,completedSteps:['0','1','4','5','6','7','8']};
+for(const name of ['phonePreference','calendarAppointmentOwner','availabilityDays','availabilityHours','contactsPreference','followupPlaybookPreference','followupGoal','followupFrequency','aiReceptionistPreference']){
+ assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...completePreferences,[name]:''},step:3}})).status,409,`${name} must block review`);
+}
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...completePreferences,contactsPreference:'Yes, I have contacts',contactImportPermission:false},step:3}})).status,409);
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...completePreferences,contactsPreference:'Yes, I have contacts',contactImportPermission:true},step:3}})).status,200);
 const reloadedBranding=await api(`applications/${alpha.data.id}`,{cookie:alphaCookie});
 assert.equal(reloadedBranding.data.data.primaryColor1,'#1677D2'); assert.equal(reloadedBranding.data.data.secondaryColor1,'255, 204, 0');
 assert.equal(reloadedBranding.data.data.domainProvider,'Test registrar');assert.equal(reloadedBranding.data.data.businessEmailProvider,'Test mail');assert.equal(reloadedBranding.data.data.accessNotes,'Arrange a provider invitation');
+assert.equal(reloadedBranding.data.data.availabilityDays,'Monday-Friday');assert.equal(reloadedBranding.data.data.followupGoal,'Book appointments');assert.equal(reloadedBranding.data.data.aiReceptionistPreference,'Not right now');
 assert.ok(reloadedBranding.data.files.some(file=>file.id===logo.data.id));
 const requiredProfile={...brandingData,businessProfileVersion:1,friendlyBusinessName:'Synthetic client',businessNiche:'Services',businessType:'Corporation',businessIndustry:'Technology',registrationIdType:'EIN',businessRegions:['USA and Canada'],address:'123 Test Street',city:'Test City',postalCode:'90001',region:'California',country:'United States',timezone:'America/Los_Angeles',representativeFirstName:'Test',representativeLastName:'Client',representativeEmail:'representative@example.test',representativeJobPosition:'Owner',representativePhone:'+15555550200',completedSteps:['0','1','4','5']};
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:requiredProfile,step:4}})).status,200);
@@ -294,5 +301,31 @@ const fileCountBefore = files.size;
 assert.equal((await api(`applications/${noLogin.data.id}/files`, {cookie: changedAdmin.cookie, body: privateUpload})).status, 409, 'an upload racing deletion cannot attach a new file');
 assert.equal(files.size, fileCountBefore, 'the rejected in-flight upload is removed from storage');
 assert.equal((await api(`applications/${noLogin.data.id}`, {cookie: changedAdmin.cookie, method: 'DELETE'})).status, 200);
+// Render the actual components to verify annotated conditional sections are absent.
+const uiCompiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
+ import {createElement} from 'react';
+ import {renderToStaticMarkup} from 'react-dom/server';
+ import {FormContext} from './app/form-parts';
+ import {PhoneCalendarStep,ContactsFollowupStep,AiReceptionistStep} from './app/setup-preference-steps';
+ import BusinessProfile from './app/business-profile';
+ export function render(kind,data){return renderToStaticMarkup(createElement(FormContext.Provider,{value:{data,set(){},files:[],upload(){},remove(){},uploading:false}},createElement({phone:PhoneCalendarStep,contacts:ContactsFollowupStep,ai:AiReceptionistStep,business:BusinessProfile}[kind])));}
+`},bundle:true,format:'esm',platform:'node',write:false,jsx:'automatic',logLevel:'silent',banner:{js:`import {createRequire as cqlCreateRequire} from 'node:module'; const require=cqlCreateRequire(${JSON.stringify(process.cwd()+'/package.json')});`}});
+const {render:renderPreferences}=await import('data:text/javascript;base64,'+Buffer.from(uiCompiled.outputFiles[0].contents).toString('base64'));
+const noContacts=renderPreferences('contacts',{contactsPreference:'Not yet',followupPlaybookPreference:'No'});
+assert.ok(!noContacts.includes('Upload your contact file'));assert.ok(!noContacts.includes('Anything we should know about your contacts?'));
+assert.ok(!noContacts.includes('permission to import'));assert.ok(!noContacts.includes('Upload an existing SOP'));
+assert.ok(noContacts.includes('What should follow-up help you accomplish?'));
+const yesContacts=renderPreferences('contacts',{contactsPreference:'Yes, I have contacts',followupPlaybookPreference:'Yes'});
+assert.ok(yesContacts.includes('Upload your contact file'));assert.ok(yesContacts.includes('permission to import'));assert.ok(yesContacts.includes('Upload an existing SOP'));
+const noAi=renderPreferences('ai',{aiReceptionistPreference:'Not right now',aiDiscussServices:'Retained hidden data'});
+assert.ok(!noAi.includes('Which services should it discuss?'));assert.ok(!noAi.includes('Retained hidden data'));
+const yesAi=renderPreferences('ai',{aiReceptionistPreference:'Yes, let’s explore it'});
+for(const label of ['Which services should it discuss?','What should it ask callers?','Booking rules','Language','Tone of voice','When should it hand off to a person?','Anything else it should know?'])assert.ok(yesAi.includes(label));
+const phoneHtml=renderPreferences('phone',{});
+assert.ok(!phoneHtml.includes('Business timezone'));assert.ok(!phoneHtml.includes('Appointment type'));
+assert.ok(phoneHtml.includes('Appointment duration (optional)'));assert.ok(phoneHtml.includes('Minimum booking notice (optional)'));
+const businessHtml=renderPreferences('business',{});
+assert.ok(!businessHtml.includes('Previous tab'));assert.ok(!businessHtml.includes('Next tab'));
+console.log('PASS rendered preference steps: conditional contact/SOP/AI sections, excluded phone fields, optional booking settings, and removed tab buttons');
 sqlite.close(); delete globalThis.__cqlTestEnv;
 console.log('PASS account API: provisioning, password change/reset, isolation, private files, draft resume, login limits, copied-link autofill, administrator deletion, shared-account preservation, final-account revocation, storage retry, transaction rollback, and upload races');
