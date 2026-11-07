@@ -12,7 +12,7 @@
     "db:migrate": "node scripts/migrate-postgres.mjs",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "test": "node tests/catalog.mjs && node tests/pricing.mjs && node tests/onboarding.mjs && node tests/platform-auth.mjs && node tests/client-access.mjs",
+    "test": "node tests/passwords.mjs && node tests/catalog.mjs && node tests/pricing.mjs && node tests/onboarding.mjs && node tests/platform-auth.mjs && node tests/client-access.mjs",
     "test:api": "node tests/platform-auth-api.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "node scripts/migrate-local.mjs"

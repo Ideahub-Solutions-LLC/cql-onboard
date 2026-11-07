@@ -2,15 +2,19 @@
 import { useEffect, useState } from 'react';
 import { Copy, KeyRound, X } from 'lucide-react';
 import { clientLoginText } from '../lib/client-login-details';
+import TemporaryPassword from './temporary-password';
+import { passwordStrength } from '../lib/passwords.mjs';
 
 export type LoginDetails = {email: string; password: string; version: string; applicationId: string};
 type CreatedApplication = Record<string, unknown> & {id: string; clientAccountCreated?: boolean; clientCredentialVersion?: string};
 export function NewClientModal({ onClose, onCreated }: {onClose: () => void; onCreated: (application: CreatedApplication, details: LoginDetails | null) => Promise<void>}) {
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   return <div className="modal-backdrop"><form className="modal" role="dialog" aria-modal="true" aria-labelledby="new-client-heading" onSubmit={async event => {
     event.preventDefault(); const form = new FormData(event.currentTarget);
     const email = String(form.get('email')).trim().toLowerCase(), password = String(form.get('temporaryPassword') || '');
+    if (password && passwordStrength(password) === 'weak') { setError('Choose a medium or strong temporary password.'); return; }
     setBusy(true); setError('');
     try {
       const response = await fetch('/api/applications', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({assignedEmail: email, temporaryPassword: password, data: {legalName: form.get('business'), contactEmail: email}})});
@@ -24,9 +28,9 @@ export function NewClientModal({ onClose, onCreated }: {onClose: () => void; onC
     <div className="modal-icon"><KeyRound size={24}/></div><h2 id="new-client-heading">A new beginning.</h2><p>Create an application and sign-in account for your client.</p>
     <label className="field"><span>Business name</span><input name="business" required disabled={busy}/></label>
     <label className="field"><span>Client’s sign-in email</span><input name="email" type="email" autoComplete="off" required maxLength={254} disabled={busy}/><small>No email is sent automatically.</small></label>
-    <label className="field"><span>Temporary password</span><input name="temporaryPassword" type="password" autoComplete="new-password" minLength={12} maxLength={1024} disabled={busy}/><small>At least 12 characters for a new login. Leave blank if this email already has a client account; its password will stay unchanged.</small></label>
+    <TemporaryPassword value={password} onChange={setPassword} disabled={busy} hint="Leave blank only if this email already has a client account; its password will stay unchanged."/>
     {error && <p className="signin-error" role="alert">{error}</p>}
-    <button className="btn primary full" disabled={busy}>{busy ? 'Creating client…' : 'Create client workspace'}</button>
+    <button className="btn primary full" disabled={busy || !!password && passwordStrength(password) === 'weak'}>{busy ? 'Creating client…' : 'Create client workspace'}</button>
   </form></div>;
 }
 
@@ -72,6 +76,7 @@ export default function ClientAccess({ applicationId, email, onReady }: {applica
       <p className="muted">{access ? access.hasAccount ? access.mustChangePassword ? 'A temporary password is set. The client must change it on sign-in.' : 'Client login is active. Reset their password if they need help signing in.' : 'This existing application needs a client login. Assign a temporary password below.' : 'Loading access…'}</p>
       <form onSubmit={async event => {
         event.preventDefault(); if (!access) return;
+        if (passwordStrength(password) === 'weak') { setError('Choose a medium or strong temporary password.'); return; }
         setBusy(true); setError('');
         try {
           const response = await fetch(`/api/applications/${applicationId}/client-access`, { method: access.hasAccount ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({temporaryPassword: password}) });
@@ -81,8 +86,8 @@ export default function ClientAccess({ applicationId, email, onReady }: {applica
         } catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to save client access.'); }
         finally { setBusy(false); }
       }}>
-        <label className="field"><span>Temporary password</span><input type="password" autoComplete="new-password" minLength={12} maxLength={1024} required value={password} disabled={busy || !access} onChange={event => setPassword(event.target.value)}/><small>At least 12 characters. A reset signs this client out on all devices.</small></label>
-        <button className="btn secondary full" disabled={busy || !access}>{busy ? 'Saving…' : access?.hasAccount ? 'Reset client password' : 'Create client login'}</button>
+        <TemporaryPassword value={password} onChange={setPassword} disabled={busy || !access} required hint="A reset signs this client out on all devices."/>
+        <button className="btn secondary full" disabled={busy || !access || passwordStrength(password) === 'weak'}>{busy ? 'Saving…' : access?.hasAccount ? 'Reset client password' : 'Create client login'}</button>
       </form>
     </>}
     {error && <p className="signin-error" role="alert">{error}</p>}

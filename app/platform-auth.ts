@@ -1,4 +1,5 @@
 // Server-only authentication. Never import this module into a client component.
+import { passwordGuidance, passwordStrength } from '../lib/passwords.mjs';
 export const administratorEmail = 'chito@ideahubsolutionsinc.com';
 const defaultPasswordSalt = 'ce02c740764741bd1a8f511e0f32a631';
 const defaultPasswordHash = '941a89420fce7a8f580372399faab54685b32bfbf990ff778cdd688c434f354f';
@@ -43,6 +44,7 @@ async function passwordMatches(password: string, credential: Pick<Credential, 's
 }
 function validatePassword(password: unknown): asserts password is string {
   if (typeof password !== 'string' || password.length < 12 || password.length > 1024) throw authError('Use a password with 12 to 1,024 characters.');
+  if (passwordStrength(password) === 'weak') throw authError('Weak passwords are not accepted. ' + passwordGuidance);
 }
 export async function verifyPlatformCredentials(email: unknown, password: unknown, db: AuthDatabase) {
   if (typeof email !== 'string' || typeof password !== 'string' || password.length > 1024 || email.length > 254) return null;

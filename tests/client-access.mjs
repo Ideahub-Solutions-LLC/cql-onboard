@@ -4,6 +4,7 @@ import { pbkdf2Sync } from 'node:crypto';
 import { build } from 'esbuild';
 import { clientLoginText, clientLoginUrl, readLoginLink } from '../lib/client-login-details.ts';
 import { createAdministratorSession } from '../app/platform-auth.ts';
+import { generateStrongPassword } from '../lib/passwords.mjs';
 
 // Exercise the real API handler with an isolated database and private file store.
 const sqlite = new DatabaseSync(':memory:');
@@ -67,6 +68,11 @@ assert.throws(() => clientLoginText(base, alpha.data.id, accessForCopy, {email: 
 assert.equal((await api('applications', {cookie: admin, body: {assignedEmail: 'missing-password@example.test', data: {legalName: 'Invalid'}}})).status, 400);
 assert.equal((await api('applications', {cookie: admin, body: {assignedEmail: 'chito@ideahubsolutionsinc.com', temporaryPassword: temporary, data: {legalName: 'Invalid'}}})).status, 400);
 assert.equal((await api('applications', {cookie: admin})).data.length, 2, 'failed account creation rolls back its application');
+const weakCreation = await api('applications', {cookie: admin, body: {assignedEmail: 'weak@example.test', temporaryPassword: 'Password123!', data: {legalName: 'Weak password'}}});
+assert.equal(weakCreation.status, 400);
+assert.match(weakCreation.data.error, /Weak passwords/);
+assert.equal((await api('applications', {cookie: admin})).data.length, 2);
+assert.equal((await login('weak@example.test', 'Password123!')).status, 401);
 
 const alphaTemporary = await login(alphaEmail.toUpperCase(), temporary);
 assert.equal(alphaTemporary.status, 200);
@@ -89,6 +95,11 @@ assert.deepEqual(readLoginLink(permanentText.split('\n')[0].slice('Client applic
 const betaTemporary = await login(betaEmail, temporary);
 await api('auth/password', {cookie: betaTemporary.cookie, body: {currentPassword: temporary, newPassword: permanent, confirmPassword: permanent}});
 const betaCookie = (await login(betaEmail, permanent)).cookie;
+assert.equal((await api('auth/password', {cookie: betaCookie, body: {currentPassword: permanent, newPassword: 'Password123!', confirmPassword: 'Password123!'}})).status, 400);
+assert.equal((await login(betaEmail, permanent)).status, 200, 'rejected password change preserves the current password');
+assert.equal((await api(`applications/${alpha.data.id}/client-access`, {cookie: admin, method: 'PUT', body: {temporaryPassword: 'Password123!'}})).status, 400);
+assert.equal((await api('session', {cookie: alphaCookie})).status, 200, 'rejected weak reset preserves the active session');
+assert.equal((await login(alphaEmail, permanent)).status, 200);
 assert.deepEqual((await api('applications', {cookie: alphaCookie})).data.map(a => a.id), [alpha.data.id]);
 
 await api(`applications/${alpha.data.id}/team`, {cookie: admin, method: 'PUT', body: {status: 'draft', checklist: {}, notes: 'PRIVATE TEAM NOTES'}});
@@ -158,6 +169,12 @@ assert.equal((await api(`applications/${legacyId}/client-access`, {cookie: admin
 assert.equal((await api(`applications/${legacyId}/client-access`, {cookie: admin, body: {temporaryPassword: temporary}})).status, 200);
 assert.equal((await login(legacyEmail, temporary)).status, 200);
 const serialized = sqlite.prepare("SELECT value FROM settings WHERE id LIKE 'auth:client:%'").all().map(row => row.value).join();
+const generatedPassword = generateStrongPassword();
+assert.equal((await api(`applications/${legacyId}/client-access`, {cookie: admin, method: 'PUT', body: {temporaryPassword: generatedPassword}})).status, 200);
+const generatedSession = await login(legacyEmail, generatedPassword);
+assert.equal(generatedSession.status, 200);
+assert.equal((await api('auth/password', {cookie: generatedSession.cookie, body: {currentPassword: generatedPassword, newPassword: 'RiverCloud82', confirmPassword: 'RiverCloud82'}})).status, 200, 'medium passwords are accepted');
+assert.equal((await login(legacyEmail, 'RiverCloud82')).status, 200);
 for (const password of [temporary, permanent, resetPassword, changedAgain]) assert.ok(!serialized.includes(password), 'passwords are never stored in plaintext');
 assert.equal((await api('auth/login', {origin: 'http://untrusted.test', body: {email: alphaEmail, password: changedAgain}})).status, 403);
 sqlite.exec("DELETE FROM settings WHERE id LIKE 'auth:attempt:%'");
