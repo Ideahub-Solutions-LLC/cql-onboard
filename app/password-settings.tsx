@@ -1,6 +1,6 @@
 'use client';
 import { useId, useState } from 'react';
-import { LockKeyhole } from 'lucide-react';
+import { Eye, EyeOff, LockKeyhole } from 'lucide-react';
 import PasswordStrengthIndicator from './password-strength';
 import { passwordStrength } from '../lib/passwords.mjs';
 
@@ -9,6 +9,7 @@ export default function PasswordSettings({ email, administrator = true, forced =
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [visible, setVisible] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   return <section className="panel panel-pad password-settings"><h3><LockKeyhole size={19}/> {forced ? 'Set your own password' : administrator ? 'Administrator password' : 'My password'}</h3>
@@ -29,9 +30,9 @@ export default function PasswordSettings({ email, administrator = true, forced =
     }}>
       <input type="text" name="username" autoComplete="username" value={email} readOnly hidden/>
       <div className="form-grid">
-        <label className="field"><span>Current password</span><input type="password" name="currentPassword" autoComplete="current-password" required maxLength={1024} disabled={busy} value={currentPassword} onChange={event => setCurrentPassword(event.target.value)}/></label>
-        <label className="field"><span>New password</span><input type="password" name="newPassword" autoComplete="new-password" required minLength={12} maxLength={1024} aria-describedby={strengthId} aria-invalid={newPassword ? passwordStrength(newPassword) === 'weak' : undefined} disabled={busy} value={newPassword} onChange={event => setNewPassword(event.target.value)}/></label>
-        <label className="field"><span>Confirm new password</span><input type="password" name="confirmPassword" autoComplete="new-password" required minLength={12} maxLength={1024} disabled={busy} value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)}/></label>
+        <label className="field"><span>Current password</span><div className="temporary-password-input"><input type={visible.currentPassword ? 'text' : 'password'} name="currentPassword" autoComplete="current-password" required maxLength={1024} disabled={busy} value={currentPassword} onChange={event => setCurrentPassword(event.target.value)}/><button type="button" disabled={busy} aria-label={visible.currentPassword ? 'Hide current password' : 'Show current password'} aria-pressed={visible.currentPassword} onClick={() => setVisible(current => ({ ...current, currentPassword: !current.currentPassword }))}>{visible.currentPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></label>
+        <label className="field"><span>New password</span><div className="temporary-password-input"><input type={visible.newPassword ? 'text' : 'password'} name="newPassword" autoComplete="new-password" required minLength={12} maxLength={1024} aria-describedby={strengthId} aria-invalid={newPassword ? passwordStrength(newPassword) === 'weak' : undefined} disabled={busy} value={newPassword} onChange={event => setNewPassword(event.target.value)}/><button type="button" disabled={busy} aria-label={visible.newPassword ? 'Hide new password' : 'Show new password'} aria-pressed={visible.newPassword} onClick={() => setVisible(current => ({ ...current, newPassword: !current.newPassword }))}>{visible.newPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></label>
+        <label className="field"><span>Confirm new password</span><div className="temporary-password-input"><input type={visible.confirmPassword ? 'text' : 'password'} name="confirmPassword" autoComplete="new-password" required minLength={12} maxLength={1024} disabled={busy} value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)}/><button type="button" disabled={busy} aria-label={visible.confirmPassword ? 'Hide confirm new password' : 'Show confirm new password'} aria-pressed={visible.confirmPassword} onClick={() => setVisible(current => ({ ...current, confirmPassword: !current.confirmPassword }))}>{visible.confirmPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></label>
       </div>
       <PasswordStrengthIndicator password={newPassword} id={strengthId}/>
       {error && <p className="signin-error" role="alert">{error}</p>}
