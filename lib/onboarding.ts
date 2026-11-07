@@ -9,6 +9,9 @@ export const steps=[
  {title:'Your setup',subtitle:'Choose what you need',heading:'What would you like help with?',description:'Choose your services, or let your specialist recommend a setup. Detailed settings and documents can come later.'},
  {title:'Review & send',subtitle:'We’ll take it from here',heading:'Ready for your setup team.',description:'Check your details and send your brief. Your specialist will follow up on anything still needed before launch.'}
 ];
+// Temporarily pause setup choices while retaining their saved answers and stable step IDs.
+export const setupStepEnabled=false;
+export const activeStepIndices=[0,1,...(setupStepEnabled?[2]:[]),3];
 export const setupServices=['Website / landing page','Business email','Phone & SMS','Booking calendar','Follow-up automation','Contact import','AI receptionist'];
 export const initialData:Answers={flowVersion:FLOW_VERSION,completedSteps:[],requestedFeatures:[],signupId:'',signupDone:false,alreadyHaveAccount:false,plan:'',setupMode:'Help me choose',launchTasks:[],country:'United States',brandType:'Registered business',domainStatus:'Help me decide',domainAccess:'Later with my setup team',siteType:'Landing page',numberType:'New local number',phoneCountry:'United States',differentRoutingPhone:false,differentCalendarOwner:false,differentRepresentative:false,customizeCalendar:false,provideVerificationNow:false,timezone:'',duration:'30',buffer:'15',notice:'24',days:['Monday','Tuesday','Wednesday','Thursday','Friday'],startTime:'09:00',endTime:'17:00',meetingType:'Video call',calendarProvider:'Google Calendar',importMode:'Later with my setup team',sopMode:'Build a playbook for me',channels:['Email','SMS'],cadence:'Immediately, 1 day, 3 days, 7 days',tone:'Friendly & professional',sendingWindow:'Confirm with my setup team',aiMode:'Discuss with my setup team',aiBilling:'AI Pay-Per-Use',aiLanguage:'English'};
 export const answer=(d:Answers,key:string)=>typeof d[key]==='string'?(d[key] as string).trim():'';
@@ -32,11 +35,21 @@ export function normalizeOnboarding(raw:Answers):Answers{
  }
  if(!d.differentRoutingPhone)d.routingPhone=answer(d,'contactPhone');
  if(!d.differentCalendarOwner)d.calendarOwner=answer(d,'contactEmail');
+ if(d.businessProfileVersion===1){
+  const fullName=answer(raw,'representative')||answer(raw,'contactName');
+  const names=fullName.split(/\s+/);
+  d.representativeFirstName=typeof raw.representativeFirstName==='string'?raw.representativeFirstName:(names[0]||'');
+  d.representativeLastName=typeof raw.representativeLastName==='string'?raw.representativeLastName:names.slice(1).join(' ');
+  d.contactName=[answer(d,'representativeFirstName'),answer(d,'representativeLastName')].filter(Boolean).join(' ');
+  d.representative=d.contactName;
+  d.differentRepresentative=true;
+ }
  if(!d.differentRepresentative){d.representative=answer(d,'contactName');d.representativeEmail=answer(d,'contactEmail');d.representativePhone=answer(d,'contactPhone');}
  return d;
 }
 export function requiredFields(d:Answers):[number,string,string][]{
- const fields:[number,string,string][]=[[1,'legalName','Business name'],[1,'services','What your business offers'],[1,'contactName','Your name'],[1,'contactEmail','Contact email'],[1,'contactPhone','Contact phone']];
+ const fields:[number,string,string][]=[[1,'legalName','Business name'],[1,'contactName','Your name'],[1,'contactEmail','Contact email'],[1,'contactPhone','Contact phone']];
+ if(d.businessProfileVersion===1)fields.push([1,'representativeFirstName','Representative first name'],[1,'timezone','Time zone']);
  if(hasService(d,'Phone & SMS')&&d.numberType==='Port an existing number')fields.push([2,'existingNumber','Number to transfer']);
  if(hasService(d,'Phone & SMS')&&d.differentRoutingPhone)fields.push([2,'routingPhone','Call forwarding number']);
  if(hasService(d,'Booking calendar')&&d.customizeCalendar){fields.push([2,'timezone','Business timezone']);if(d.differentCalendarOwner)fields.push([2,'calendarOwner','Calendar owner email']);}
@@ -52,6 +65,11 @@ export function stepErrors(step:number,d:Answers,config:Config):string[]{
  const errors=missingFields(d).filter(([i])=>i===step).map(([, ,label])=>'Add '+label.toLowerCase()+'.');
  if(step===0){if(!d.alreadyHaveAccount&&!config.signupOptions.some(o=>o.id===d.signupId&&o.enabled))errors.push('Choose an available signup option.');if(!d.signupDone)errors.push(d.alreadyHaveAccount?'Confirm that you already have a CQL account.':'Finish signup in the popup, then choose “I’ve completed signup”.');}
  if(step===1&&answer(d,'contactEmail')&&!validEmail(answer(d,'contactEmail')))errors.push('Enter a valid contact email.');
+ if(step===1){
+  if(answer(d,'representativeEmail')&&!validEmail(answer(d,'representativeEmail')))errors.push('Enter a valid representative email.');
+  if(answer(d,'website')){try{const url=new URL(answer(d,'website'));if(!['https:','http:'].includes(url.protocol)||url.username||url.password)throw new Error();}catch{errors.push('Enter a valid business website beginning with https:// or http://.');}}
+  if(answer(d,'timezone')){try{new Intl.DateTimeFormat('en',{timeZone:answer(d,'timezone')});}catch{errors.push('Choose a valid time zone.');}}
+ }
  if(step===2){
   if(!['Help me choose','Choose my services'].includes(answer(d,'setupMode')))errors.push('Choose how you would like to plan your setup.');
   if(d.setupMode==='Choose my services'&&(!list(d,'launchTasks').length||list(d,'launchTasks').some(s=>!setupServices.includes(s))))errors.push('Choose at least one service, or let your specialist help you choose.');
@@ -61,9 +79,9 @@ export function stepErrors(step:number,d:Answers,config:Config):string[]{
  }
  return errors;
 }
-export function submissionErrors(d:Answers,config:Config){const errors=steps.flatMap((_,i)=>stepErrors(i,d,config));if(!d.reviewAccuracy||!d.reviewUsage||!d.reviewAuthority||!answer(d,'signature'))errors.push('Complete the acknowledgments and type your name.');return errors;}
-export function unlockedStep(d:Answers,config:Config){let i=0;while(i<steps.length-1&&list(d,'completedSteps').includes(String(i))&&!stepErrors(i,d,config).length)i++;return i;}
-export function resumeStep(raw:Answers,storedStep:number,config:Config){const mapped=raw.flowVersion===FLOW_VERSION?storedStep:storedStep===0?0:storedStep===1?1:storedStep===7?3:2;return Math.max(0,Math.min(mapped,unlockedStep(normalizeOnboarding(raw),config)));}
+export function submissionErrors(d:Answers,config:Config){const errors=activeStepIndices.flatMap(i=>stepErrors(i,d,config));if(!d.reviewAccuracy||!d.reviewUsage||!d.reviewAuthority||!answer(d,'signature'))errors.push('Complete the acknowledgments and type your name.');return errors;}
+export function unlockedStep(d:Answers,config:Config){let position=0;while(position<activeStepIndices.length-1&&list(d,'completedSteps').includes(String(activeStepIndices[position]))&&!stepErrors(activeStepIndices[position],d,config).length)position++;return activeStepIndices[position];}
+export function resumeStep(raw:Answers,storedStep:number,config:Config){const mapped=raw.flowVersion===FLOW_VERSION?storedStep:storedStep===0?0:storedStep===1?1:storedStep===7?3:2;return Math.max(0,Math.min(!setupStepEnabled&&mapped===2?3:mapped,unlockedStep(normalizeOnboarding(raw),config)));}
 export function deferredSetupItems(d:Answers):string[]{
  if(d.flowVersion!==FLOW_VERSION)return [];
  if(d.setupMode==='Help me choose')return ['Confirm services and setup scope','Collect technical settings and account access'];

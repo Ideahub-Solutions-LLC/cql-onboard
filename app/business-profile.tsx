@@ -1,0 +1,84 @@
+'use client';
+
+import { useContext, useId, useState } from 'react';
+import { Tabs } from 'radix-ui';
+import { CheckField, Field, FormContext, Section } from './form-parts';
+
+const labels = ['General information', 'Business Information', 'Business Physical Address', 'Authorized Representative'];
+const regions = ['Africa', 'Asia', 'Europe', 'Latin America', 'USA and Canada'];
+const languages = ['English (United States)', 'English (United Kingdom)', 'Spanish', 'French', 'German', 'Portuguese', 'Chinese', 'Japanese', 'Korean', 'Arabic', 'Hindi', 'Other'];
+const countries = ['United States', 'Canada', 'United Kingdom', 'Australia', 'New Zealand', 'Philippines', 'Taiwan', 'India', 'Singapore', 'Mexico', 'Other'];
+
+// Suggested values remain editable for businesses outside the common categories.
+function SuggestedField({ name, label, options, required = false }: { name: string; label: string; options: string[]; required?: boolean }) {
+  const { data, set } = useContext(FormContext);
+  const id = useId();
+  return <label className="field"><span>{label}{required && <b className="required">*</b>}</span><input list={id} value={data[name] || ''} aria-required={required || undefined} maxLength={2000} onChange={event => set(name, event.target.value)}/><datalist id={id}>{[...new Set(options)].map(option => <option key={option} value={option}/>)}</datalist></label>;
+}
+
+export default function BusinessProfile() {
+  const context = useContext(FormContext);
+  const [tab, setTab] = useState('0');
+  const name = String(context.data.representative || context.data.contactName || '').trim().split(/\s+/);
+  const data = {
+    ...context.data,
+    representativeFirstName: context.data.representativeFirstName ?? name[0] ?? '',
+    representativeLastName: context.data.representativeLastName ?? name.slice(1).join(' '),
+  };
+  const set = (field: string, value: unknown) => context.setMany({
+    businessProfileVersion: 1,
+    representativeFirstName: data.representativeFirstName,
+    representativeLastName: data.representativeLastName,
+    [field]: value,
+  });
+  const timezones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : ['America/Los_Angeles', 'America/Denver', 'America/Chicago', 'America/New_York', 'Europe/London', 'Asia/Taipei', 'Asia/Manila', 'UTC'];
+  const currencies = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('currency') : ['USD', 'CAD', 'GBP', 'AUD', 'EUR', 'PHP', 'TWD'];
+  return <FormContext.Provider value={{ ...context, data, set }}><Tabs.Root value={tab} onValueChange={setTab} className="business-profile">
+    <Tabs.List className="business-profile-tabs" aria-label="Business details">{labels.map((label, index) => <Tabs.Trigger type="button" key={label} value={String(index)}>{label}</Tabs.Trigger>)}</Tabs.List>
+    <Tabs.Content value="0" className="business-profile-panel"><Section title={labels[0]}>
+      <div className="form-grid">
+        <Field name="friendlyBusinessName" label="Friendly Business Name" wide autoComplete="organization"/>
+        <Field name="legalName" label="Legal Business Name" hint="Enter the exact legal business name, as registered with your business registration ID." required wide/>
+        <Field name="contactEmail" label="Business Email" type="email" required autoComplete="email"/>
+        <Field name="contactPhone" label="Business Phone" type="tel" required autoComplete="tel"/>
+        <Field name="website" label="Business Website" type="url" placeholder="https://yourbusiness.com" wide autoComplete="url"/>
+        <SuggestedField name="businessNiche" label="Business Niche" options={['Marketing Agency', 'Dental Practice', 'Healthcare', 'Home Services', 'Real Estate', 'Professional Services', 'Retail', 'Other']}/>
+        <Field name="businessCurrency" label="Business Currency" options={currencies}/>
+      </div>
+    </Section></Tabs.Content>
+    <Tabs.Content value="1" className="business-profile-panel"><Section title={labels[1]}>
+      <div className="business-profile-stack">
+        <SuggestedField name="businessType" label="Business Type" options={['Limited Liability Company Or Sole-Proprietorship', 'Corporation', 'Partnership', 'Nonprofit', 'Cooperative', 'Other']}/>
+        <SuggestedField name="businessIndustry" label="Business Industry" options={['Technology', 'Healthcare', 'Finance', 'Education', 'Construction', 'Professional Services', 'Retail', 'Other']}/>
+        <fieldset className="business-registration" disabled={!!data.businessNotRegistered}>
+          <SuggestedField name="registrationIdType" label="Business Registration ID Type" options={['USA: Employer Identification Number (EIN)', 'Canada: Business Number (BN)', 'UK: Company Registration Number', 'Australia: Australian Business Number (ABN)', 'Other']}/>
+          <Field name="taxId" label="Business Registration Number"/>
+        </fieldset>
+        <CheckField name="businessNotRegistered">My business is Not registered</CheckField>
+        <fieldset className="business-regions"><legend>Business Regions of Operations</legend>{regions.map(region => <label className="check-field" key={region}><input type="checkbox" checked={(data.businessRegions || []).includes(region)} onChange={event => set('businessRegions', event.target.checked ? [...(data.businessRegions || []), region] : (data.businessRegions || []).filter((item: string) => item !== region))}/><span>{region}</span></label>)}</fieldset>
+      </div>
+    </Section></Tabs.Content>
+    <Tabs.Content value="2" className="business-profile-panel"><Section title={labels[2]}>
+      <div className="form-grid">
+        <Field name="address" label="Street Address" wide autoComplete="street-address"/>
+        <Field name="city" label="City" autoComplete="address-level2"/>
+        <Field name="postalCode" label="Postal/Zip Code" autoComplete="postal-code"/>
+        <div className="wide"><SuggestedField name="region" label="State / Prov / Region" options={['California', 'New York', 'Texas', 'Florida', 'Ontario', 'British Columbia']}/></div>
+        <div className="wide"><SuggestedField name="country" label="Country" options={countries}/></div>
+        <div className="wide"><SuggestedField name="timezone" label="Time Zone" options={['UTC', ...timezones]} required/></div>
+        <Field name="platformLanguage" label="Platform Language" options={languages} wide/>
+        <Field name="outboundLanguage" label="Outbound communication language for custom values" options={languages} wide/>
+      </div>
+    </Section></Tabs.Content>
+    <Tabs.Content value="3" className="business-profile-panel"><Section title={labels[3]}>
+      <div className="form-grid">
+        <Field name="representativeFirstName" label="First Name" required autoComplete="given-name"/>
+        <Field name="representativeLastName" label="Last Name" autoComplete="family-name"/>
+        <Field name="representativeEmail" label="Representative Email" type="email" wide/>
+        <div className="wide"><SuggestedField name="representativeJobPosition" label="Job Position" options={['CEO', 'Owner', 'President', 'Director', 'Manager', 'Other']}/></div>
+        <Field name="representativePhone" label="Phone Number (With Country Code)" type="tel" wide/>
+      </div>
+    </Section></Tabs.Content>
+    <div className="business-tab-footer"><span>Use Save draft to save your details at any time.</span>{Number(tab) > 0 && <button type="button" className="btn secondary" onClick={() => setTab(String(Number(tab) - 1))}>Previous tab</button>}{Number(tab) < 3 && <button type="button" className="btn secondary" onClick={() => setTab(String(Number(tab) + 1))}>Next tab</button>}</div>
+  </Tabs.Root></FormContext.Provider>;
+}

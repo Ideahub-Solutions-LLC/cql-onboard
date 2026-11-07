@@ -3,8 +3,9 @@ import React,{useContext} from 'react';
 import {Field,CheckField,Choices,Multi,Section,Note,Upload,FeeMenu,FormContext} from './form-parts';
 import {ArrowRight,FileDown,Clock3} from 'lucide-react';
 import SignupStep from './signup-step';
+import BusinessProfile from './business-profile';
 import {deferredSetupItems,missingFields} from '../lib/shared';
-import {setupServices,hasService} from '../lib/onboarding';
+import {activeStepIndices,setupStepEnabled,setupServices,hasService} from '../lib/onboarding';
 
 export default function StepContent({step,config,exportBrief,jump}:any){
  const {data}=useContext(FormContext);
@@ -12,16 +13,8 @@ export default function StepContent({step,config,exportBrief,jump}:any){
  const later=deferredSetupItems(data);
  return <>
   {step===0&&<SignupStep config={config}/>}
-  {step===1&&<>
-   <Section title="Your business" description="A short description is enough. Your specialist will work through the details with you.">
-    <div className="form-grid"><Field name="legalName" label="Business name" placeholder="Your registered business name" required autoComplete="organization"/><Field name="services" label="What does your business offer?" placeholder="e.g. Home cleaning for families in Los Angeles" required rows={2} wide/></div>
-   </Section>
-   <Section title="Who should we work with?" description="We’ll reuse these details for your setup so you don’t have to enter them again.">
-    <div className="form-grid"><Field name="contactName" label="Your name" required autoComplete="name"/><Field name="contactEmail" label="Contact email" type="email" required autoComplete="email"/><Field name="contactPhone" label="Contact phone" type="tel" required autoComplete="tel"/></div>
-   </Section>
-   <details className="quick-details"><summary>Add a website or a note <span>Optional</span></summary><div className="quick-details-body form-grid"><Field name="website" label="Existing website" type="url" placeholder="https://yourbusiness.com"/><Field name="goal" label="Your main goal" placeholder="e.g. Book more appointments"/><Field name="finalNotes" label="Anything your specialist should know?" rows={2} wide/></div></details>
-  </>}
-  {step===2&&<>
+  {step===1&&<BusinessProfile/>}
+  {step===2&&setupStepEnabled&&<>
    <Section title="How would you like to get started?">
     <Choices name="setupMode" options={[{value:'Help me choose',description:'Tell us your business basics. Your specialist will recommend the right setup.',tag:'Quickest path'},{value:'Choose my services',description:'Pick what you need. Add any preferences you already know.'}]}/>
    </Section>
@@ -77,9 +70,9 @@ export default function StepContent({step,config,exportBrief,jump}:any){
   </>}
   {step===3&&<>
    <div className="quick-review-grid">
-    {[['Your account',data.plan||'Account confirmation needed',0],['Your business',[data.legalName,data.services,data.contactName,data.contactEmail,data.contactPhone].filter(Boolean).join(' · '),1],['Your setup',data.setupMode==='Help me choose'?'Your specialist will recommend the right setup.':(data.launchTasks||[]).join(' · '),2]].map(([title,value,index])=><button type="button" className="quick-review-card" key={String(title)} onClick={()=>jump(Number(index))}><div><strong>{title}</strong><p>{value}</p></div><span>Edit <ArrowRight size={15}/></span></button>)}
+    {[['Your account',data.plan||'Account confirmation needed',0],['Your business',[data.legalName,data.services,data.contactName,data.contactEmail,data.contactPhone].filter(Boolean).join(' · '),1],['Your setup',data.setupMode==='Help me choose'?'Your specialist will recommend the right setup.':(data.launchTasks||[]).join(' · '),2]].filter(([, ,index])=>activeStepIndices.includes(Number(index))).map(([title,value,index])=><button type="button" className="quick-review-card" key={String(title)} onClick={()=>jump(Number(index))}><div><strong>{title}</strong><p>{value}</p></div><span>Edit <ArrowRight size={15}/></span></button>)}
    </div>
-   {missingFields(data).length>0&&<Note>There are {missingFields(data).length} required details to complete. Select Edit above to add them.</Note>}
+   {missingFields(data).filter(([index])=>activeStepIndices.includes(index)).length>0&&<Note>There are {missingFields(data).filter(([index])=>activeStepIndices.includes(index)).length} required details to complete. Select Edit above to add them.</Note>}
    {!!later.length&&<div className="specialist-handoff"><Clock3 size={22}/><div><h3>With your setup specialist</h3><p>You can send this brief now. Your team will follow up on:</p><ul>{later.map(item=><li key={item}>{item}</li>)}</ul><p>These items still need to be resolved before the relevant services go live.</p></div></div>}
    <details className="quick-details"><summary>Your subscription & usage rates <span>Review pricing</span></summary><div className="quick-details-body"><Note>Your account and billing arrangement will be verified by the team. Items marked Confirm with CQL need a quote before activation.</Note><FeeMenu config={config}/></div></details>
    {!!data.requestedFeatures?.length&&<Section title="Extra feature requests"><p>{data.requestedFeatures.join(' · ')}</p><p className="setup-later-note">Requests are for team review and do not activate services or charge your card.</p></Section>}

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import {steps,initialData,normalizeOnboarding,submissionErrors,stepErrors,requiredFields,unlockedStep,resumeStep,deferredSetupItems,onboardingTasks} from '../lib/onboarding.ts';
+import {activeStepIndices,steps,initialData,normalizeOnboarding,submissionErrors,stepErrors,requiredFields,unlockedStep,resumeStep,deferredSetupItems,onboardingTasks} from '../lib/onboarding.ts';
 import {signupDefaults} from '../lib/catalog.ts';
 const config={signupOptions:signupDefaults};
 const brief=()=>normalizeOnboarding({...initialData,alreadyHaveAccount:true,signupDone:true,legalName:'Synthetic Services',services:'Home cleaning',contactName:'Test Client',contactEmail:'client@example.test',contactPhone:'+15555550100',reviewAccuracy:true,reviewAuthority:true,reviewUsage:true,signature:'Test Client'});
 let count=0;const check=(name,fn)=>{fn();count++;console.log('PASS '+name);};
-check('four steps and five required business details on the shortest path',()=>{assert.equal(steps.length,4);assert.equal(requiredFields(brief()).length,5);});
+check('three active steps retain stable IDs and four required business details',()=>{assert.deepEqual(activeStepIndices,[0,1,3]);assert.equal(steps[activeStepIndices[2]].title,'Review & send');assert.equal(requiredFields(brief()).length,4);});
 check('essential brief can submit without domain, EIN, calendar, SOP, or AI settings',()=>assert.deepEqual(submissionErrors(brief(),config),[]));
 check('each core business detail is still required',()=>{for(const [,key] of requiredFields(brief()))assert.ok(submissionErrors({...brief(),[key]:''},config).length);});
 check('contact email syntax is validated',()=>assert.match(submissionErrors({...brief(),contactEmail:'bad'},config).join(),/valid contact email/));
@@ -22,7 +22,40 @@ check('optional calendar customization requires timezone and valid hours',()=>{c
 check('contact permission is required for selected imports now',()=>{const d={...brief(),setupMode:'Choose my services',launchTasks:['Contact import'],importMode:'I have contacts to import'};assert.match(stepErrors(2,d,config).join(),/permission/);assert.deepEqual(stepErrors(2,{...d,importConsent:true},config),[]);assert.deepEqual(stepErrors(2,{...d,importMode:'Later with my setup team'},config),[]);});
 check('legacy draft answers and credentials metadata are preserved',()=>{const d=normalizeOnboarding({...brief(),flowVersion:2,completedSteps:['0','1','2','3','4','5','6'],domain:'old.example.test',accessNotes:'Existing invitation',generatedSop:'Existing draft',routingPhone:'+15555550999'});assert.equal(d.domain,'old.example.test');assert.equal(d.accessNotes,'Existing invitation');assert.equal(d.generatedSop,'Existing draft');assert.equal(d.routingPhone,'+15555550999');assert.deepEqual(d.completedSteps,['0','1','2']);});
 check('legacy review step maps to the new review',()=>{const d={...brief(),flowVersion:2,completedSteps:['0','1','2','3','4','5','6']};assert.equal(resumeStep(d,7,config),3);});
-check('incomplete migrated business details cannot unlock setup',()=>{const d=normalizeOnboarding({...brief(),flowVersion:2,services:'',completedSteps:['0','1','2','3','4','5','6']});assert.equal(unlockedStep(d,config),1);});
+check('incomplete migrated business details cannot unlock setup',()=>{const d=normalizeOnboarding({...brief(),flowVersion:2,legalName:'',completedSteps:['0','1','2','3','4','5','6']});assert.equal(unlockedStep(d,config),1);});
 check('new drafts unlock sequentially',()=>{const d=brief();assert.equal(unlockedStep(d,config),0);assert.equal(unlockedStep({...d,completedSteps:['0']},config),1);assert.equal(unlockedStep({...d,completedSteps:['0','1','2']},config),3);});
+check('business completion unlocks review without completing hidden setup',()=>{
+ const d={...brief(),completedSteps:['0','1']};
+ assert.equal(unlockedStep(d,config),3);
+ assert.equal(resumeStep(d,2,config),3);
+ assert.equal(resumeStep(d,3,config),3);
+ assert.equal(resumeStep({...d,contactEmail:''},2,config),1);
+});
+check('hidden setup requirements do not block sending a brief or erase saved answers',()=>{
+ const d=normalizeOnboarding({...brief(),completedSteps:['0','1'],setupMode:'Choose my services',launchTasks:['Phone & SMS'],numberType:'Port an existing number',existingNumber:'',domain:'saved.example.test'});
+ assert.ok(stepErrors(2,d,config).length);
+ assert.deepEqual(submissionErrors(d,config),[]);
+ assert.equal(d.domain,'saved.example.test');
+ assert.equal(d.setupMode,'Choose my services');
+ assert.deepEqual(d.launchTasks,['Phone & SMS']);
+});
 check('deferred work yields launch checklist tasks, without changing old submissions',()=>{assert.ok(onboardingTasks(brief()).length);assert.deepEqual(onboardingTasks({...brief(),flowVersion:2}),[]);});
+check('tabbed business profile preserves independent representative details and all tab answers',()=>{
+ const profile=normalizeOnboarding({...brief(),businessProfileVersion:1,representativeFirstName:'Casey',representativeLastName:'Example',representativeEmail:'representative@example.test',representativePhone:'+15555550999',friendlyBusinessName:'Friendly business',businessNiche:'Dental',businessCurrency:'USD',businessType:'Corporation',businessIndustry:'Healthcare',registrationIdType:'EIN',taxId:'123456789',businessNotRegistered:false,businessRegions:['USA and Canada'],address:'123 Test Street',city:'Test City',region:'California',postalCode:'90001',country:'United States',timezone:'America/Los_Angeles',platformLanguage:'English (United States)',outboundLanguage:'Spanish',representativeJobPosition:'Owner'});
+ assert.equal(profile.contactName,'Casey Example');
+ assert.equal(profile.representativeEmail,'representative@example.test');
+ assert.equal(profile.contactEmail,'client@example.test');
+ assert.deepEqual(submissionErrors(profile,config),[]);
+ const saved=normalizeOnboarding(JSON.parse(JSON.stringify(profile)));
+ assert.deepEqual(saved,profile);
+ assert.equal(saved.friendlyBusinessName,'Friendly business');
+ assert.deepEqual(saved.businessRegions,['USA and Canada']);
+ assert.equal(saved.representativePhone,'+15555550999');
+ assert.equal(saved.outboundLanguage,'Spanish');
+ assert.ok(stepErrors(1,{...profile,timezone:''},config).some(error=>/time zone/i.test(error)));
+ assert.ok(stepErrors(1,{...profile,timezone:'invalid'},config).some(error=>/time zone/i.test(error)));
+ assert.ok(stepErrors(1,{...profile,representativeEmail:'invalid'},config).some(error=>/representative email/.test(error)));
+ assert.ok(stepErrors(1,{...profile,website:'javascript:alert(1)'},config).some(error=>/website/.test(error)));
+ assert.deepEqual(submissionErrors({...profile,services:'',businessNotRegistered:true,taxId:''},config),[]);
+});
 console.log(`${count} onboarding checks passed.`);
