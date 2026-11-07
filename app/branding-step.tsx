@@ -4,6 +4,7 @@ import { useContext, useId, useState } from 'react';
 import { UploadCloud, Trash2 } from 'lucide-react';
 import { FormContext, Section } from './form-parts';
 import { brandColors, colorHex, colorRgb, logoCategories } from '../lib/branding.mjs';
+import { uploadAccept, uploadError } from '../lib/uploads.mjs';
 
 function BrandColor({ name, label, required }: typeof brandColors[number]) {
   const { data, set } = useContext(FormContext);
@@ -34,15 +35,15 @@ function LogoUpload({ category, title }: { category: string; title: string }) {
   const id = useId();
   const logos = files.filter((file: { category: string }) => file.category === category);
   return <section className="brand-logo-card"><h4>{title} <small>Optional</small></h4>
-    <p>PNG, JPG, or WebP · Up to 10 MB per file</p>
-    <label className="brand-logo-upload" htmlFor={id}><UploadCloud size={20}/><span>{uploading ? 'Uploading…' : 'Upload logo'}</span><input id={id} aria-label={`Upload ${title}`} type="file" accept=".png,.jpg,.jpeg,.webp" disabled={uploading || working} onChange={async event => {
-      const file = event.target.files?.[0]; event.target.value = ''; setError('');
-      if (!file) return;
-      if (!/\.(png|jpe?g|webp)$/i.test(file.name)) { setError('Choose a PNG, JPG, or WebP image.'); return; }
-      if (!file.size || file.size > 10 * 1024 * 1024) { setError('Choose an image between 1 byte and 10 MB.'); return; }
-      if (!await upload([file], category)) setError('Your logo could not be uploaded. Check the message above and try again.');
+    <p>Select multiple PNG, JPG, or WebP images · Up to 10 MB per file</p>
+    <label className="brand-logo-upload" htmlFor={id}><UploadCloud size={20}/><span>{uploading ? 'Uploading…' : 'Upload logos'}</span><input id={id} aria-label={`Upload ${title}`} type="file" multiple accept={uploadAccept(category)} disabled={uploading || working} onChange={async event => {
+      const selectedFiles = Array.from(event.target.files || []); event.target.value = ''; setError('');
+      if (!selectedFiles.length) return;
+      const invalid = uploadError(selectedFiles, category);
+      if (invalid) { setError(invalid); return; }
+      if (!await upload(selectedFiles, category)) setError('Upload could not finish. Logos already listed are saved; retry any missing images.');
     }}/></label>
-    {!logos.length && <div className="brand-logo-empty">Your uploaded logo will appear here.</div>}
+    {!logos.length && <div className="brand-logo-empty">Your uploaded logos will appear here.</div>}
     {logos.map((file: { id: string; name: string }) => <div className="brand-logo-file" key={file.id}>
       {!failedPreviews.includes(file.id) ? <div className="brand-logo-preview"><img src={`/api/files/${file.id}?preview=1`} alt={`${title}: ${file.name}`} onError={() => setFailedPreviews(current => [...current, file.id])}/></div> : <p>Preview unavailable. You can download the logo below.</p>}
       <div><a href={`/api/files/${file.id}`}>{file.name}</a><button type="button" disabled={uploading || working} aria-label={`Remove ${file.name}`} onClick={async () => { setWorking(true); setError(''); try { if (!await remove(file.id)) setError('Your logo could not be removed. Try again.'); } finally { setWorking(false); } }}><Trash2 size={16}/> Remove</button></div>
@@ -57,6 +58,6 @@ export default function BrandingStep() {
       <div className="brand-color-group"><h4>Primary colors</h4>{brandColors.slice(0, 3).map(color => <BrandColor key={color.name} {...color}/>)}</div>
       <div className="brand-color-group"><h4>Secondary colors</h4>{brandColors.slice(3).map(color => <BrandColor key={color.name} {...color}/>)}</div>
     </Section>
-    <Section title="Logos" description="Upload either or both logo formats. You can save and continue without a logo."><div className="brand-logo-grid"><LogoUpload category={logoCategories[0]} title="Logo Square/Portrait Size"/><LogoUpload category={logoCategories[1]} title="Logo Landscape Size"/></div></Section>
+    <Section title="Logos" description="Upload multiple images for either or both logo formats. You can save and continue without a logo."><div className="brand-logo-grid"><LogoUpload category={logoCategories[0]} title="Logo Square/Portrait Size"/><LogoUpload category={logoCategories[1]} title="Logo Landscape Size"/></div></Section>
   </>;
 }

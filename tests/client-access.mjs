@@ -157,6 +157,25 @@ assert.equal((await api('files/'+logo.data.id+'?preview=1',{cookie:betaCookie}))
 assert.equal((await api('files/'+logo.data.id+'?preview=1')).status,401);
 const fakeLogo = new FormData(); fakeLogo.append('category','Logo Landscape'); fakeLogo.append('file',new Blob(['<script>bad</script>'],{type:'image/png'}),'fake.png');
 assert.equal((await api(`applications/${alpha.data.id}/files`,{cookie:alphaCookie,body:fakeLogo})).status,400);
+// Multiple files in each upload area remain separate saved attachments.
+const batches=[
+ ['Logo Square/Portrait',['square-one.png','square-two.png']],
+ ['Logo Landscape',['landscape-one.png','landscape-two.png']],
+ ['Contacts',['contacts-one.csv','contacts-two.xlsx']],
+ ['Follow-up SOP',['process-one.pdf','process-two.docx','process-three.txt']],
+];
+for(const [category,names] of batches){
+ for(const name of names){
+  const body=new FormData();body.append('category',category);body.append('file',new Blob([category.startsWith('Logo')?pngBytes:'Synthetic upload content']),name);
+  assert.equal((await api(`applications/${alpha.data.id}/files`,{cookie:alphaCookie,body})).status,201,`save ${name}`);
+ }
+ const saved=(await api(`applications/${alpha.data.id}`,{cookie:alphaCookie})).data.files;
+ for(const name of names)assert.ok(saved.some(file=>file.name===name&&file.category===category),`${name} is retained after reloading`);
+}
+for(const [category,name] of [['Contacts','wrong.pdf'],['Follow-up SOP','wrong.xlsx'],['Logo Landscape','wrong.pdf']]){
+ const body=new FormData();body.append('category',category);body.append('file',new Blob(['Synthetic wrong type']),name);
+ assert.equal((await api(`applications/${alpha.data.id}/files`,{cookie:alphaCookie,body})).status,400,'file types enforced per upload area');
+}
 const brandingData={...savedData,phonePreference:'New local number',calendarAppointmentOwner:'Test Client',availabilityDays:'Monday-Friday',availabilityHours:'9 AM-5 PM',contactsPreference:'Not yet',followupPlaybookPreference:'No',followupGoal:'Book appointments',followupFrequency:'Within one business day',aiReceptionistPreference:'Not right now',alreadyHaveAccount:true,signupDone:true,legalName:'Synthetic brand',contactName:'Test Client',contactPhone:'+15555550100',domain:'synthetic.example',domainProvider:'Test registrar',businessEmailProvider:'Test mail',emailSetupPreference:'Connect existing email',preferredAccessMethod:'Discuss with setup team',accessNotes:'Arrange a provider invitation',completedSteps:['0','1'],primaryColor1:'#1677D2',secondaryColor1:'255, 204, 0'};
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:brandingData,step:4}})).status,200);
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:brandingData,step:3}})).status,409,'branding must be completed before review');
@@ -322,8 +341,9 @@ const uiCompiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',conte
  import {FormContext} from './app/form-parts';
  import {PhoneCalendarStep,ContactsFollowupStep,AiReceptionistStep} from './app/setup-preference-steps';
  import BusinessProfile from './app/business-profile';
+ import BrandingStep from './app/branding-step';
  import OnboardingSummary from './app/onboarding-summary';
- export function render(kind,data){return renderToStaticMarkup(createElement(FormContext.Provider,{value:{data,set(){},files:[],upload(){},remove(){},uploading:false}},createElement({phone:PhoneCalendarStep,contacts:ContactsFollowupStep,ai:AiReceptionistStep,business:BusinessProfile,summary:()=>createElement(OnboardingSummary,{config:{signupOptions:[]}})}[kind])));}
+ export function render(kind,data){return renderToStaticMarkup(createElement(FormContext.Provider,{value:{data,set(){},files:[],upload(){},remove(){},uploading:false}},createElement({phone:PhoneCalendarStep,contacts:ContactsFollowupStep,ai:AiReceptionistStep,business:BusinessProfile,branding:BrandingStep,summary:()=>createElement(OnboardingSummary,{config:{signupOptions:[]}})}[kind])));}
 `},bundle:true,format:'esm',platform:'node',write:false,jsx:'automatic',logLevel:'silent',banner:{js:`import {createRequire as cqlCreateRequire} from 'node:module'; const require=cqlCreateRequire(${JSON.stringify(process.cwd()+'/package.json')});`}});
 const {render:renderPreferences}=await import('data:text/javascript;base64,'+Buffer.from(uiCompiled.outputFiles[0].contents).toString('base64'));
 const noContacts=renderPreferences('contacts',{contactsPreference:'Not yet',followupPlaybookPreference:'No'});
@@ -343,6 +363,9 @@ const businessHtml=renderPreferences('business',{});
 assert.ok(!businessHtml.includes('Previous tab'));assert.ok(!businessHtml.includes('Next tab'));
 const summaryHtml=renderPreferences('summary',{legalName:'Summary Test',followupGoal:'Book qualified appointments'});
 assert.equal((summaryHtml.match(/<details/g)||[]).length,7);assert.ok(summaryHtml.includes('<summary>'));assert.ok(summaryHtml.includes('Summary Test'));assert.ok(summaryHtml.includes('Book qualified appointments'));assert.ok(!summaryHtml.includes('Edit'));
+const brandingHtml=renderPreferences('branding',{});
+assert.equal((brandingHtml.match(/type="file" multiple=""/g)||[]).length,2,'Both logo formats accept multiple images');
+assert.ok(yesContacts.includes('multiple=""'));assert.ok(yesContacts.includes('accept=".csv,.tsv,.xls,.xlsx"'));assert.ok(yesContacts.includes('accept=".pdf,.doc,.docx,.txt"'));
 console.log('PASS rendered preference steps: conditional contact/SOP/AI sections, excluded phone fields, optional booking settings, and removed tab buttons');
 sqlite.close(); delete globalThis.__cqlTestEnv;
 console.log('PASS account API: provisioning, password change/reset, isolation, private files, draft resume, login limits, copied-link autofill, administrator deletion, shared-account preservation, final-account revocation, storage retry, transaction rollback, and upload races');

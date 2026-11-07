@@ -1,6 +1,7 @@
 'use client';
 import {PricingCatalog} from './pricing-page';
-import React,{createContext,useContext} from 'react';
+import {uploadAccept,uploadError} from '../lib/uploads.mjs';
+import React,{createContext,useContext,useState} from 'react';
 import {UploadCloud,FileText,Trash2,Check,Info,ArrowUpRight} from 'lucide-react';
 export const FormContext=createContext<any>(null);
 export function Field({name,label,hint,placeholder,type='text',options,wide=false,rows,required=false,requiredLabel='*',disabled=false,autoComplete}:any){const {data,set}=useContext(FormContext);return <label className={'field '+(wide?'wide':'')}><span>{label}{required&&<b className="required">{requiredLabel}</b>}</span>{options?<select disabled={disabled} aria-required={required||undefined} value={data[name]||''} onChange={e=>set(name,e.target.value)}><option value="">Select an option</option>{options.map((o:string)=><option key={o}>{o}</option>)}</select>:rows?<textarea disabled={disabled} aria-required={required||undefined} rows={rows} value={data[name]||''} placeholder={placeholder} maxLength={20000} onChange={e=>set(name,e.target.value)}/>:<input disabled={disabled} type={type} autoComplete={autoComplete} aria-required={required||undefined} value={data[name]||''} placeholder={placeholder} maxLength={2000} onChange={e=>set(name,e.target.value)}/>} {hint&&<small>{hint}</small>}</label>}
@@ -9,5 +10,16 @@ export function Choices({name,options,compact=false}:any){const {data,set}=useCo
 export function Multi({name,options}:any){const {data,set}=useContext(FormContext);return <div className="chips">{options.map((v:string)=><button key={v} type="button" aria-pressed={(data[name]||[]).includes(v)} className={(data[name]||[]).includes(v)?'chip chosen':'chip'} onClick={()=>set(name,(data[name]||[]).includes(v)?data[name].filter((x:string)=>x!==v):[...(data[name]||[]),v])}>{(data[name]||[]).includes(v)&&<Check size={13}/>} {v}</button>)}</div>}
 export function Section({title,description,children}:any){return <section className="form-section"><div className="section-heading"><h3>{title}</h3>{description&&<p>{description}</p>}</div>{children}</section>}
 export function Note({children}:any){return <div className="note"><Info size={17}/><span>{children}</span></div>}
-export function Upload({category,title,description}:any){const {files,upload,remove,uploading}=useContext(FormContext);return <div className="upload-wrap"><label className="dropzone" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();upload(Array.from(e.dataTransfer.files),category);}}><span className="upload-icon"><UploadCloud size={22}/></span><strong>{uploading?'Uploading…':title||'Click to upload or drag and drop'}</strong><span>{description||'PDF, images, CSV, Excel, Word or text · Up to 10 MB each'}</span><input type="file" multiple disabled={uploading} accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.tsv,.xlsx,.xls,.doc,.docx,.txt" aria-label={'Upload '+category} onChange={e=>{upload(Array.from(e.target.files||[]),category);e.target.value='';}}/></label>{files.filter((f:any)=>f.category===category).map((f:any)=><div className="file-row" key={f.id}><FileText size={18}/><a href={'/api/files/'+f.id}>{f.name}</a><small>{(f.size/1024).toFixed(0)} KB</small><button title="Remove file" aria-label={'Remove '+f.name} onClick={()=>remove(f.id)}><Trash2 size={15}/></button></div>)}</div>}
+export function Upload({category,title,description}:any){
+ const {files,upload,remove,uploading}=useContext(FormContext);
+ const [error,setError]=useState('');
+ const add=async(selectedFiles:File[])=>{
+  if(uploading||!selectedFiles.length)return;
+  setError('');
+  const invalid=uploadError(selectedFiles,category);
+  if(invalid){setError(invalid);return;}
+  if(!await upload(selectedFiles,category))setError('Upload could not finish. Files already listed are saved; retry any missing files.');
+ };
+ return <div className="upload-wrap"><label className="dropzone" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();void add(Array.from(e.dataTransfer.files));}}><span className="upload-icon"><UploadCloud size={22}/></span><strong>{uploading?'Uploading…':title||'Click to upload or drag and drop'}</strong><span>{description||'Select multiple files · PDF, images, CSV, Excel, Word or text · Up to 10 MB each'}</span><input type="file" multiple disabled={uploading} accept={uploadAccept(category)} aria-label={'Upload '+category} onChange={e=>{const selectedFiles=Array.from(e.target.files||[]);e.target.value='';void add(selectedFiles);}}/></label>{files.filter((f:any)=>f.category===category).map((f:any)=><div className="file-row" key={f.id}><FileText size={18}/><a href={'/api/files/'+f.id}>{f.name}</a><small>{(f.size/1024).toFixed(0)} KB</small><button type="button" disabled={uploading} title="Remove file" aria-label={'Remove '+f.name} onClick={()=>remove(f.id)}><Trash2 size={15}/></button></div>)}{error&&<p className="signin-error" role="alert">{error}</p>}</div>;
+}
 export function FeeMenu({config}:any){const {data}=useContext(FormContext);const option=config.signupOptions.find((o:any)=>o.id===data.signupId);return <PricingCatalog config={config} accountTier={option?.pricingTier} requested={data.requestedFeatures||[]} compact/>}
