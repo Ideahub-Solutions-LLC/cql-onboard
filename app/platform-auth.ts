@@ -91,6 +91,13 @@ export async function getClientAccess(db: AuthDatabase, email: string) {
   const { credential } = await loadCredential(db, normalizeEmail(email));
   return { hasAccount: !!credential, mustChangePassword: !!credential?.mustChangePassword, credentialVersion: credential?.version };
 }
+export async function unusedClientAccountDeletion(db: AuthDatabase, email: string) {
+  email = normalizeEmail(email);
+  if (email === administratorEmail) return null;
+  const { key, credential } = await loadCredential(db, email);
+  if (!credential) return null;
+  return db.prepare('DELETE FROM settings WHERE id=? AND NOT EXISTS (SELECT id FROM applications WHERE lower(assigned_email)=? OR owner_id=?)').bind(key, email, credential.userId);
+}
 export async function changePlatformPassword(db: AuthDatabase, email: string, currentPassword: unknown, newPassword: unknown, confirmation: unknown) {
   email = normalizeEmail(email);
   if (!await allowLoginAttempt(db, Date.now(), email)) throw authError('Too many password attempts. Try again in 15 minutes.', 429);

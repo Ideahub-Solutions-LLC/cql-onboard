@@ -3,8 +3,9 @@ import { del, get, put } from "@vercel/blob";
 
 type QueryRows = Record<string, unknown>[];
 
-function createNeonDatabase(connectionString: string) {
+export function createNeonDatabase(connectionString: string) {
   const sql = neon(connectionString);
+  const statements = new WeakMap<object, {statement: string; parameters: unknown[]}>();
 
   const execute = async (statement: string, parameters: unknown[] = []) => {
     const { text, values, returnsRows } = toPostgres(statement, parameters);
@@ -13,11 +14,22 @@ function createNeonDatabase(connectionString: string) {
   };
 
   return {
+    async batch(prepared: object[]) {
+      const queries = prepared.map(item => {
+        const source = statements.get(item);
+        if (!source) throw new Error('Invalid database batch statement.');
+        const { text, values } = toPostgres(source.statement, source.parameters);
+        return sql.query(text, values);
+      });
+      const results = await sql.transaction(queries);
+      return results.map(rows => ({ success: true, meta: { changes: rows.length } }));
+    },
     prepare(statement: string) {
       let parameters: unknown[] = [];
       const bound = {
         bind(...values: unknown[]) {
           parameters = values;
+          statements.set(bound, {statement, parameters});
           return bound;
         },
         async first<T = Record<string, unknown>>() {
@@ -33,6 +45,7 @@ function createNeonDatabase(connectionString: string) {
           return { success: true, meta: { changes: result.changes } };
         },
       };
+      statements.set(bound, {statement, parameters});
       return bound;
     },
   };

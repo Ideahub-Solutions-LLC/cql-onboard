@@ -1,0 +1,5 @@
+{
+  "debugPortAddress": "127.0.0.1:51026",
+  "defaultEntrypointService": "assets:rpc-proxy:cql-auth-qa",
+  "userWorkerService": "core:user:cql-auth-qa"
+}

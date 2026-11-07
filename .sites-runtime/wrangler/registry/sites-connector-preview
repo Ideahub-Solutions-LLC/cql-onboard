@@ -1,5 +1,5 @@
 {
-  "debugPortAddress": "127.0.0.1:57724",
+  "debugPortAddress": "127.0.0.1:63624",
   "defaultEntrypointService": "core:user:sites-connector-preview",
   "userWorkerService": "core:user:sites-connector-preview"
 }

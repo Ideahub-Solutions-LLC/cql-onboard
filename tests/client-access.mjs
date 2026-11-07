@@ -8,13 +8,23 @@ import { generateStrongPassword } from '../lib/passwords.mjs';
 
 // Exercise the real API handler with an isolated database and private file store.
 const sqlite = new DatabaseSync(':memory:');
+let failBatch = false;
 const db = { prepare(sql) {
   const statement = sqlite.prepare(sql); let values = [];
   return { bind(...args) { values = args; return this; }, async run() { return {meta: {changes: Number(statement.run(...values).changes)}}; }, async first() { return statement.get(...values) ?? null; }, async all() { return {results: statement.all(...values)}; } };
+}, async batch(statements) {
+  sqlite.exec('BEGIN');
+  try {
+    const results = [];
+    for (const statement of statements) { results.push(await statement.run()); if (failBatch) throw new Error('Synthetic batch failure'); }
+    sqlite.exec('COMMIT'); return results;
+  } catch (failure) { sqlite.exec('ROLLBACK'); throw failure; }
 } };
 const files = new Map();
+let failFileDeletion = false;
+let onFilePut = null;
 globalThis.__cqlTestEnv = { DB: db, VAULT_KEY: btoa('01234567890123456789012345678901'), BUCKET: {
-  async put(key, bytes) { files.set(key, bytes); }, async get(key) { return files.has(key) ? {body: files.get(key)} : null; }, async delete(key) { files.delete(key); },
+  async put(key, bytes) { files.set(key, bytes); if (onFilePut) { const callback = onFilePut; onFilePut = null; callback(); } }, async get(key) { return files.has(key) ? {body: files.get(key)} : null; }, async delete(key) { if (failFileDeletion) throw new Error('Synthetic storage failure'); files.delete(key); },
 } };
 const compiled = await build({ entryPoints: ['app/api/[...path]/route.ts'], bundle: true, format: 'esm', platform: 'node', write: false, logLevel: 'silent', plugins: [{name: 'isolated-test-bindings', setup(builder) {
   builder.onResolve({filter: /^cloudflare:workers$/}, () => ({path: 'bindings', namespace: 'test'}));
@@ -22,12 +32,12 @@ const compiled = await build({ entryPoints: ['app/api/[...path]/route.ts'], bund
 }}] });
 const routes = await import('data:text/javascript;base64,' + Buffer.from(compiled.outputFiles[0].contents).toString('base64'));
 const base = 'http://client-access.test';
-async function api(path, {cookie, body, method = body ? 'POST' : 'GET', origin = base} = {}) {
+async function api(path, {cookie, body, method = body ? 'POST' : 'GET', origin = base, allowServerError = false} = {}) {
   const headers = {Origin: origin, ...(cookie ? {Cookie: cookie} : {}), ...(body && !(body instanceof FormData) ? {'Content-Type': 'application/json'} : {})};
   const request = new Request(base + '/api/' + path, {method, headers, body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined});
   const response = await routes[method](request);
   const text = await response.text(); let data; try { data = JSON.parse(text); } catch { data = text; }
-  assert.ok(response.status < 500, `${method} ${path}: ${response.status} ${text}`);
+  if (!allowServerError) assert.ok(response.status < 500, `${method} ${path}: ${response.status} ${text}`);
   return {status: response.status, data, cookie: response.headers.get('set-cookie')?.split(';')[0]};
 }
 const alphaEmail = 'alpha@example.test', betaEmail = 'beta@example.test';
@@ -202,5 +212,56 @@ const changedAdmin = await login(adminEmail, nextAdminPassword);
 assert.equal(changedAdmin.status, 200);
 assert.equal((await api('session', {cookie: changedAdmin.cookie})).data.admin, true);
 assert.ok(!sqlite.prepare("SELECT value FROM settings WHERE id='auth:administrator'").get().value.includes(nextAdminPassword));
+
+// Administrator deletion removes one row and its private data, preserving shared accounts.
+const deletionEmail = 'delete-client@example.test';
+const createDeletionClient = name => api('applications', {cookie: changedAdmin.cookie, body: {assignedEmail: deletionEmail, temporaryPassword: temporary, data: {legalName: name}}});
+const deletionClient = await createDeletionClient('Delete synthetic client');
+const sharedClient = await createDeletionClient('Keep shared application');
+const deletionLogin = await login(deletionEmail, temporary);
+await api('auth/password', {cookie: deletionLogin.cookie, body: {currentPassword: temporary, newPassword: permanent, confirmPassword: permanent}});
+const deletionCookie = (await login(deletionEmail, permanent)).cookie;
+assert.equal((await api(`applications/${deletionClient.data.id}`, {cookie: deletionCookie, method: 'DELETE'})).status, 403, 'clients cannot delete their own application');
+assert.equal((await api(`applications/${deletionClient.data.id}`, {cookie: betaCookie, method: 'DELETE'})).status, 403, 'clients cannot delete another account');
+assert.equal((await api(`applications/${deletionClient.data.id}`, {method: 'DELETE'})).status, 401);
+assert.equal((await api(`applications/${deletionClient.data.id}`, {cookie: changedAdmin.cookie, method: 'DELETE', origin: 'https://untrusted.test'})).status, 403);
+const privateUpload = new FormData(); privateUpload.append('file', new Blob(['Delete synthetic file']), 'delete.txt');
+const deletionFile = await api(`applications/${deletionClient.data.id}/files`, {cookie: changedAdmin.cookie, body: privateUpload});
+assert.equal(deletionFile.status, 201);
+const objectKey = sqlite.prepare('SELECT object_key FROM attachments WHERE id=?').get(deletionFile.data.id).object_key;
+sqlite.prepare('INSERT INTO secrets (application_id,ciphertext,updated_at) VALUES (?,?,?)').run(deletionClient.data.id, 'Synthetic vault data', new Date().toISOString());
+failFileDeletion = true;
+assert.equal((await api(`applications/${deletionClient.data.id}`, {cookie: changedAdmin.cookie, method: 'DELETE', allowServerError: true})).status, 503);
+assert.equal(sqlite.prepare('SELECT status FROM applications WHERE id=?').get(deletionClient.data.id).status, 'deleting');
+assert.equal((await api(`applications/${deletionClient.data.id}`, {cookie: deletionCookie})).status, 409);
+assert.ok(!(await api('applications', {cookie: deletionCookie})).data.some(application => application.id === deletionClient.data.id), 'pending deletions are hidden from client lists');
+assert.equal((await api(`files/${deletionFile.data.id}`, {cookie: deletionCookie})).status, 409, 'pending deletion blocks file access');
+assert.equal((await api(`applications/${deletionClient.data.id}/team`, {cookie: changedAdmin.cookie, method: 'PUT', body: {status: 'draft'}})).status, 409, 'pending deletion cannot be restored by editing status');
+failFileDeletion = false;
+failBatch = true;
+const originalError = console.error; console.error = () => {};
+try { assert.equal((await api(`applications/${deletionClient.data.id}`, {cookie: changedAdmin.cookie, method: 'DELETE', allowServerError: true})).status, 500); } finally { console.error = originalError; failBatch = false; }
+assert.ok(sqlite.prepare('SELECT id FROM attachments WHERE id=?').get(deletionFile.data.id), 'failed batch rolls back metadata deletion');
+assert.ok(sqlite.prepare('SELECT ciphertext FROM secrets WHERE application_id=?').get(deletionClient.data.id));
+assert.equal((await api(`applications/${deletionClient.data.id}`, {cookie: changedAdmin.cookie, method: 'DELETE'})).status, 200, 'failed deletion is retryable');
+assert.equal(files.has(objectKey), false);
+assert.equal(sqlite.prepare('SELECT id FROM attachments WHERE application_id=?').get(deletionClient.data.id), undefined);
+assert.equal(sqlite.prepare('SELECT ciphertext FROM secrets WHERE application_id=?').get(deletionClient.data.id), undefined);
+assert.equal((await api(`applications/${deletionClient.data.id}`, {cookie: changedAdmin.cookie})).status, 404);
+assert.equal((await api(`applications/${deletionClient.data.id}`, {cookie: changedAdmin.cookie, method: 'DELETE'})).status, 404);
+assert.equal((await api(`files/${deletionFile.data.id}`, {cookie: changedAdmin.cookie})).status, 404);
+assert.equal((await api('session', {cookie: deletionCookie})).status, 200, 'shared application keeps its login');
+assert.equal((await api(`applications/${sharedClient.data.id}`, {cookie: deletionCookie})).status, 200);
+assert.equal((await api(`applications/${sharedClient.data.id}`, {cookie: changedAdmin.cookie, method: 'DELETE'})).status, 200);
+assert.equal((await api('session', {cookie: deletionCookie})).status, 401, 'deleting the last application revokes client access');
+assert.equal((await login(deletionEmail, permanent)).status, 401);
+assert.equal((await api('session', {cookie: betaCookie})).status, 200);
+assert.equal((await api('session', {cookie: changedAdmin.cookie})).status, 200);
+const noLogin = await api('applications', {cookie: changedAdmin.cookie, body: {data: {legalName: 'No client login'}}});
+onFilePut = () => sqlite.prepare("UPDATE applications SET status='deleting' WHERE id=?").run(noLogin.data.id);
+const fileCountBefore = files.size;
+assert.equal((await api(`applications/${noLogin.data.id}/files`, {cookie: changedAdmin.cookie, body: privateUpload})).status, 409, 'an upload racing deletion cannot attach a new file');
+assert.equal(files.size, fileCountBefore, 'the rejected in-flight upload is removed from storage');
+assert.equal((await api(`applications/${noLogin.data.id}`, {cookie: changedAdmin.cookie, method: 'DELETE'})).status, 200);
 sqlite.close(); delete globalThis.__cqlTestEnv;
-console.log('PASS account API: client provisioning, first-login gate, password change/reset, isolation, private files/notes, draft resume, existing applications, credential hashing, CSRF, login limits, administrator password changes/session revocation, and copied-link autofill');
+console.log('PASS account API: provisioning, password change/reset, isolation, private files, draft resume, login limits, copied-link autofill, administrator deletion, shared-account preservation, final-account revocation, storage retry, transaction rollback, and upload races');
