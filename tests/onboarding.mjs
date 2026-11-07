@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import {activeStepIndices,steps,initialData,normalizeOnboarding,submissionErrors,stepErrors,requiredFields,unlockedStep,resumeStep,deferredSetupItems,onboardingTasks} from '../lib/onboarding.ts';
 import {BRANDING_STEP,colorHex,colorRgb} from '../lib/branding.mjs';
+import {DOMAIN_EMAIL_STEP,validDomainName} from '../lib/domain-email.mjs';
 import {signupDefaults} from '../lib/catalog.ts';
 const config={signupOptions:signupDefaults};
-const brief=()=>normalizeOnboarding({...initialData,alreadyHaveAccount:true,signupDone:true,primaryColor1:'#1677D2',secondaryColor1:'#FFCC00',legalName:'Synthetic Services',services:'Home cleaning',contactName:'Test Client',contactEmail:'client@example.test',contactPhone:'+15555550100',reviewAccuracy:true,reviewAuthority:true,reviewUsage:true,signature:'Test Client'});
+const brief=()=>normalizeOnboarding({...initialData,alreadyHaveAccount:true,signupDone:true,domain:'synthetic.example',domainProvider:'Example registrar',businessEmailProvider:'Example mail',emailSetupPreference:'Set up new email',preferredAccessMethod:'Provider invitation (recommended)',primaryColor1:'#1677D2',secondaryColor1:'#FFCC00',legalName:'Synthetic Services',services:'Home cleaning',contactName:'Test Client',contactEmail:'client@example.test',contactPhone:'+15555550100',reviewAccuracy:true,reviewAuthority:true,reviewUsage:true,signature:'Test Client'});
 let count=0;const check=(name,fn)=>{fn();count++;console.log('PASS '+name);};
-check('four active steps include branding before review',()=>{assert.deepEqual(activeStepIndices,[0,1,4,3]);assert.equal(steps[activeStepIndices[2]].title,'Branding');assert.equal(requiredFields(brief()).length,6);});
-check('essential brief can submit without domain, EIN, calendar, SOP, or AI settings',()=>assert.deepEqual(submissionErrors(brief(),config),[]));
-check('each core business detail is still required',()=>{for(const [,key] of requiredFields(brief()))assert.ok(submissionErrors({...brief(),[key]:''},config).length);});
+check('five active steps include domain and email before review',()=>{assert.deepEqual(activeStepIndices,[0,1,4,5,3]);assert.equal(steps[activeStepIndices[2]].title,'Branding');assert.equal(requiredFields(brief()).length,11);});
+check('essential brief can submit without EIN, calendar, SOP, or AI settings',()=>assert.deepEqual(submissionErrors(brief(),config),[]));
+check('each required client detail is still enforced',()=>{for(const [,key] of requiredFields(brief()))assert.ok(submissionErrors({...brief(),[key]:''},config).length);});
 check('contact email syntax is validated',()=>assert.match(submissionErrors({...brief(),contactEmail:'bad'},config).join(),/valid contact email/));
 check('all acknowledgments and signature remain explicit',()=>{for(const key of ['reviewAccuracy','reviewAuthority','reviewUsage','signature'])assert.ok(submissionErrors({...brief(),[key]:''},config).length);});
 check('signup remains required',()=>assert.ok(stepErrors(0,{...brief(),signupDone:false},config).length));
@@ -47,6 +48,15 @@ check('tabbed business profile preserves independent representative details and 
  assert.equal(profile.representativeEmail,'representative@example.test');
  assert.equal(profile.contactEmail,'client@example.test');
  assert.deepEqual(submissionErrors(profile,config),[]);
+ for(const name of ['friendlyBusinessName','businessNiche','businessType','businessIndustry','registrationIdType','address','city','postalCode','region','country','representativeFirstName','representativeLastName','representativeEmail','representativeJobPosition','representativePhone']){
+  assert.ok(stepErrors(1,{...profile,[name]:''},config).length,`${name} must be required`);
+  assert.ok(submissionErrors({...profile,[name]:''},config).length,`${name} must block submission`);
+ }
+ assert.ok(stepErrors(1,{...profile,businessRegions:[]},config).some(error=>/region of operations/.test(error)));
+ assert.ok(stepErrors(1,{...profile,businessRegions:['invalid']},config).length);
+ assert.ok(stepErrors(1,{...profile,businessNotRegistered:true,registrationIdType:''},config).length);
+ assert.deepEqual(stepErrors(1,{...profile,businessNotRegistered:true,registrationIdType:'Not registered'},config),[]);
+
  const saved=normalizeOnboarding(JSON.parse(JSON.stringify(profile)));
  assert.deepEqual(saved,profile);
  assert.equal(saved.friendlyBusinessName,'Friendly business');
@@ -70,9 +80,26 @@ check('branding requires two main colors and validates optional colors',()=>{
  assert.equal(colorHex('#abc'),'#AABBCC');assert.equal(colorHex('rgb(255, 0, 22)'),'#FF0016');
  assert.equal(colorHex('255, 0, 22'),'#FF0016');assert.equal(colorRgb('#FF0016'),'255, 0, 22');
  for(const value of ['rgb(256,0,0)','-1,0,0','#12345','rgb(1,2,3','1,2,3)'])assert.equal(colorHex(value),null);
- assert.equal(unlockedStep({...d,completedSteps:['0','1','4']},config),3);
- assert.equal(resumeStep({...d,completedSteps:['0','1','4']},3,config),3);
+ assert.equal(unlockedStep({...d,completedSteps:['0','1','4']},config),DOMAIN_EMAIL_STEP);
+ assert.equal(resumeStep({...d,completedSteps:['0','1','4']},3,config),DOMAIN_EMAIL_STEP);
  assert.equal(unlockedStep({...d,primaryColor1:'',completedSteps:['0','1','4']},config),BRANDING_STEP);
  assert.ok(submissionErrors({...d,secondaryColor1:''},config).length);
+});
+check('domain and email fields gate review and preserve optional instructions',()=>{
+ const d={...brief(),completedSteps:['0','1','4','5'],accessNotes:'Invite the setup specialist using the provider portal.'};
+ assert.deepEqual(stepErrors(DOMAIN_EMAIL_STEP,d,config),[]);
+ assert.equal(unlockedStep(d,config),3);
+ assert.equal(resumeStep(d,3,config),3);
+ for(const name of ['domain','domainProvider','businessEmailProvider','emailSetupPreference','preferredAccessMethod']){
+  assert.ok(stepErrors(DOMAIN_EMAIL_STEP,{...d,[name]:''},config).length);
+  assert.equal(unlockedStep({...d,[name]:''},config),DOMAIN_EMAIL_STEP);
+  assert.ok(submissionErrors({...d,[name]:''},config).length);
+ }
+ for(const value of ['https://example.com','example.com/page','name@example.com','localhost','127.0.0.1','bad_domain.com'])assert.equal(validDomainName(value),false);
+ for(const value of ['example.com','mail.example.co.uk','xn--bcher-kva.example'])assert.equal(validDomainName(value),true);
+ assert.ok(stepErrors(DOMAIN_EMAIL_STEP,{...d,emailSetupPreference:'invalid'},config).length);
+ assert.ok(stepErrors(DOMAIN_EMAIL_STEP,{...d,preferredAccessMethod:'invalid'},config).length);
+ assert.deepEqual(stepErrors(DOMAIN_EMAIL_STEP,{...d,accessNotes:''},config),[]);
+ assert.equal(normalizeOnboarding(JSON.parse(JSON.stringify(d))).accessNotes,d.accessNotes);
 });
 console.log(`${count} onboarding checks passed.`);

@@ -157,14 +157,23 @@ assert.equal((await api('files/'+logo.data.id+'?preview=1',{cookie:betaCookie}))
 assert.equal((await api('files/'+logo.data.id+'?preview=1')).status,401);
 const fakeLogo = new FormData(); fakeLogo.append('category','Logo Landscape'); fakeLogo.append('file',new Blob(['<script>bad</script>'],{type:'image/png'}),'fake.png');
 assert.equal((await api(`applications/${alpha.data.id}/files`,{cookie:alphaCookie,body:fakeLogo})).status,400);
-const brandingData={...savedData,alreadyHaveAccount:true,signupDone:true,legalName:'Synthetic brand',contactName:'Test Client',contactPhone:'+15555550100',completedSteps:['0','1'],primaryColor1:'#1677D2',secondaryColor1:'255, 204, 0'};
+const brandingData={...savedData,alreadyHaveAccount:true,signupDone:true,legalName:'Synthetic brand',contactName:'Test Client',contactPhone:'+15555550100',domain:'synthetic.example',domainProvider:'Test registrar',businessEmailProvider:'Test mail',emailSetupPreference:'Connect existing email',preferredAccessMethod:'Discuss with setup team',accessNotes:'Arrange a provider invitation',completedSteps:['0','1'],primaryColor1:'#1677D2',secondaryColor1:'255, 204, 0'};
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:brandingData,step:4}})).status,200);
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:brandingData,step:3}})).status,409,'branding must be completed before review');
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,primaryColor1:'invalid',completedSteps:['0','1','4']},step:3}})).status,409);
-assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,completedSteps:['0','1','4']},step:3}})).status,200);
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,completedSteps:['0','1','4']},step:5}})).status,200);
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,completedSteps:['0','1','4']},step:3}})).status,409,'domain and email must be completed before review');
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,domain:'invalid',completedSteps:['0','1','4','5']},step:3}})).status,409);
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...brandingData,completedSteps:['0','1','4','5']},step:3}})).status,200);
 const reloadedBranding=await api(`applications/${alpha.data.id}`,{cookie:alphaCookie});
 assert.equal(reloadedBranding.data.data.primaryColor1,'#1677D2'); assert.equal(reloadedBranding.data.data.secondaryColor1,'255, 204, 0');
+assert.equal(reloadedBranding.data.data.domainProvider,'Test registrar');assert.equal(reloadedBranding.data.data.businessEmailProvider,'Test mail');assert.equal(reloadedBranding.data.data.accessNotes,'Arrange a provider invitation');
 assert.ok(reloadedBranding.data.files.some(file=>file.id===logo.data.id));
+const requiredProfile={...brandingData,businessProfileVersion:1,friendlyBusinessName:'Synthetic client',businessNiche:'Services',businessType:'Corporation',businessIndustry:'Technology',registrationIdType:'EIN',businessRegions:['USA and Canada'],address:'123 Test Street',city:'Test City',postalCode:'90001',region:'California',country:'United States',timezone:'America/Los_Angeles',representativeFirstName:'Test',representativeLastName:'Client',representativeEmail:'representative@example.test',representativeJobPosition:'Owner',representativePhone:'+15555550200',completedSteps:['0','1','4','5']};
+assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:requiredProfile,step:4}})).status,200);
+for(const name of ['friendlyBusinessName','businessNiche','businessType','businessIndustry','registrationIdType','address','city','postalCode','region','country','representativeFirstName','representativeLastName','representativeEmail','representativeJobPosition','representativePhone','businessRegions']){
+ assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:{...requiredProfile,[name]:name==='businessRegions'?[]:''},step:4}})).status,409,`${name} must block continuing to Branding`);
+}
 assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:savedData,step:0}})).status,200);
 assert.equal((await api(`applications/${alpha.data.id}/secret`, {cookie: alphaCookie})).status, 403);
 assert.equal((await api('price-lists', {cookie: alphaCookie, body: ownUpload})).status, 403);

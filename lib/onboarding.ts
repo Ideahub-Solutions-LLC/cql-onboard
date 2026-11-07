@@ -1,3 +1,4 @@
+import {DOMAIN_EMAIL_STEP,domainEmailFields,emailSetupOptions,accessMethodOptions,validDomainName} from './domain-email.mjs';
 import {BRANDING_STEP,REVIEW_STEP,brandColors,colorHex} from './branding.mjs';
 import type {SignupOption} from './catalog';
 
@@ -9,11 +10,12 @@ export const steps=[
  {title:'Your business',subtitle:'Just the essentials',heading:'Tell us the basics.',description:'A few details so your setup specialist can get started. You can leave the technical work to us.'},
  {title:'Your setup',subtitle:'Choose what you need',heading:'What would you like help with?',description:'Choose your services, or let your specialist recommend a setup. Detailed settings and documents can come later.'},
  {title:'Review & send',subtitle:'We’ll take it from here',heading:'Ready for your setup team.',description:'Check your details and send your brief. Your specialist will follow up on anything still needed before launch.'},
- {title:'Branding',subtitle:'Colors & logos',heading:'Make it your brand.',description:'Share your brand colors and upload your logos so your setup team can create a consistent look.'}
+ {title:'Branding',subtitle:'Colors & logos',heading:'Make it your brand.',description:'Share your brand colors and upload your logos so your setup team can create a consistent look.'},
+ {title:'Domain and Email Reference',subtitle:'Domain & email preferences',heading:'Domain and Email Reference',description:'Share your domain, email provider, and preferred way for your setup team to arrange access.'}
 ];
 // Temporarily pause setup choices while retaining their saved answers and stable step IDs.
 export const setupStepEnabled=false;
-export const activeStepIndices=[0,1,...(setupStepEnabled?[2]:[]),BRANDING_STEP,REVIEW_STEP];
+export const activeStepIndices=[0,1,...(setupStepEnabled?[2]:[]),BRANDING_STEP,DOMAIN_EMAIL_STEP,REVIEW_STEP];
 export const setupServices=['Website / landing page','Business email','Phone & SMS','Booking calendar','Follow-up automation','Contact import','AI receptionist'];
 export const initialData:Answers={flowVersion:FLOW_VERSION,completedSteps:[],requestedFeatures:[],signupId:'',signupDone:false,alreadyHaveAccount:false,plan:'',setupMode:'Help me choose',launchTasks:[],country:'United States',brandType:'Registered business',domainStatus:'Help me decide',domainAccess:'Later with my setup team',siteType:'Landing page',numberType:'New local number',phoneCountry:'United States',differentRoutingPhone:false,differentCalendarOwner:false,differentRepresentative:false,customizeCalendar:false,provideVerificationNow:false,timezone:'',duration:'30',buffer:'15',notice:'24',days:['Monday','Tuesday','Wednesday','Thursday','Friday'],startTime:'09:00',endTime:'17:00',meetingType:'Video call',calendarProvider:'Google Calendar',importMode:'Later with my setup team',sopMode:'Build a playbook for me',channels:['Email','SMS'],cadence:'Immediately, 1 day, 3 days, 7 days',tone:'Friendly & professional',sendingWindow:'Confirm with my setup team',aiMode:'Discuss with my setup team',aiBilling:'AI Pay-Per-Use',aiLanguage:'English'};
 export const answer=(d:Answers,key:string)=>typeof d[key]==='string'?(d[key] as string).trim():'';
@@ -51,8 +53,12 @@ export function normalizeOnboarding(raw:Answers):Answers{
 }
 export function requiredFields(d:Answers):[number,string,string][]{
  const fields:[number,string,string][]=[[1,'legalName','Business name'],[1,'contactName','Your name'],[1,'contactEmail','Contact email'],[1,'contactPhone','Contact phone']];
+ for(const [name,label] of domainEmailFields)fields.push([DOMAIN_EMAIL_STEP,name,label]);
  for(const color of brandColors)if(color.required)fields.push([BRANDING_STEP,color.name,color.label]);
- if(d.businessProfileVersion===1)fields.push([1,'representativeFirstName','Representative first name'],[1,'timezone','Time zone']);
+ if(d.businessProfileVersion===1){
+  const profileFields=[['friendlyBusinessName','Friendly Business Name'],['businessNiche','Business Niche'],['businessType','Business Type'],['businessIndustry','Business Industry'],['registrationIdType','Business Registration ID Type'],['address','Street Address'],['city','City'],['postalCode','Postal/Zip Code'],['region','State / Prov / Region'],['country','Country'],['representativeFirstName','First Name'],['representativeLastName','Last Name'],['representativeEmail','Representative Email'],['representativeJobPosition','Job Position'],['representativePhone','Phone Number (With Country Code)'],['timezone','Time zone']];
+  for(const [name,label] of profileFields)fields.push([1,name,label]);
+ }
  if(hasService(d,'Phone & SMS')&&d.numberType==='Port an existing number')fields.push([2,'existingNumber','Number to transfer']);
  if(hasService(d,'Phone & SMS')&&d.differentRoutingPhone)fields.push([2,'routingPhone','Call forwarding number']);
  if(hasService(d,'Booking calendar')&&d.customizeCalendar){fields.push([2,'timezone','Business timezone']);if(d.differentCalendarOwner)fields.push([2,'calendarOwner','Calendar owner email']);}
@@ -69,9 +75,15 @@ export function stepErrors(step:number,d:Answers,config:Config):string[]{
  if(step===0){if(!d.alreadyHaveAccount&&!config.signupOptions.some(o=>o.id===d.signupId&&o.enabled))errors.push('Choose an available signup option.');if(!d.signupDone)errors.push(d.alreadyHaveAccount?'Confirm that you already have a CQL account.':'Finish signup in the popup, then choose “I’ve completed signup”.');}
  if(step===1&&answer(d,'contactEmail')&&!validEmail(answer(d,'contactEmail')))errors.push('Enter a valid contact email.');
  if(step===1){
+  if(d.businessProfileVersion===1&&!list(d,'businessRegions').some(region=>['Africa','Asia','Europe','Latin America','USA and Canada'].includes(region)))errors.push('Choose at least one business region of operations.');
   if(answer(d,'representativeEmail')&&!validEmail(answer(d,'representativeEmail')))errors.push('Enter a valid representative email.');
   if(answer(d,'website')){try{const url=new URL(answer(d,'website'));if(!['https:','http:'].includes(url.protocol)||url.username||url.password)throw new Error();}catch{errors.push('Enter a valid business website beginning with https:// or http://.');}}
   if(answer(d,'timezone')){try{new Intl.DateTimeFormat('en',{timeZone:answer(d,'timezone')});}catch{errors.push('Choose a valid time zone.');}}
+ }
+ if(step===DOMAIN_EMAIL_STEP){
+  if(answer(d,'domain')&&!validDomainName(answer(d,'domain')))errors.push('Enter a valid domain name such as yourcompany.com, without https:// or a page path.');
+  if(answer(d,'emailSetupPreference')&&!emailSetupOptions.includes(answer(d,'emailSetupPreference')))errors.push('Choose an available email setup preference.');
+  if(answer(d,'preferredAccessMethod')&&!accessMethodOptions.includes(answer(d,'preferredAccessMethod')))errors.push('Choose an available access method.');
  }
  if(step===BRANDING_STEP){for(const color of brandColors){const value=answer(d,color.name);if(value&&!colorHex(value))errors.push('Enter a valid Hex or RGB value for '+color.label+'.');}}
  if(step===2){
