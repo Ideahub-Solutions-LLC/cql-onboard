@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {createSetupBrief,briefRows} from '../lib/setup-brief.ts';
 
 // Long free-form answers must span pages without dropping text or exposing vault data.
@@ -16,7 +17,10 @@ const sample={
 assert.deepEqual(briefRows({password:'secret',nested:{accessToken:'secret',approved:false},zero:0,blank:'',items:['A','B']}),[
   ['Nested / Approved','No'],['Zero','0'],['Blank','Not provided'],['Items','A, B'],
 ]);
-const pdf=createSetupBrief(sample);
+const logo=new Uint8Array(readFileSync(new URL('../public/cql-logo.png',import.meta.url)));
+const pdf=createSetupBrief(sample,logo);
+assert.equal(Object.keys(pdf.internal.collections.addImage_images).length,1,'The PDF embeds one reusable CQL logo');
+for(const page of pdf.internal.pages.slice(1)) assert.ok(page.join('\n').includes('/I0 Do'),'Every page includes the CQL logo');
 const content=pdf.output();
 assert.ok(content.startsWith('%PDF-'));
 assert.ok(pdf.getNumberOfPages()>8,'Long answers should paginate');
@@ -27,7 +31,7 @@ for(const value of ['DO-NOT-EXPORT','PRIVATE-STORAGE','Flow version','Completed 
 assert.equal(briefRows(sample.answers).find(([label])=>label==='Existing CQL account')[1],'No');
 if(process.env.SETUP_BRIEF_SAMPLE){
   const {writeFileSync}=await import('node:fs');
-  const preview=createSetupBrief({...sample,answers:{...sample.answers,followupGoal:'Respond quickly, qualify leads, and book a consultation.'}});
+  const preview=createSetupBrief({...sample,answers:{...sample.answers,followupGoal:'Respond quickly, qualify leads, and book a consultation.'}},logo);
   writeFileSync(process.env.SETUP_BRIEF_SAMPLE,Buffer.from(preview.output('arraybuffer')));
 }
 console.log(`PASS PDF export: all steps, retained data, pricing, privacy, and ${pdf.getNumberOfPages()}-page long-answer layout`);

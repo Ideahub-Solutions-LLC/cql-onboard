@@ -14,12 +14,13 @@ export type SetupBrief = {
   submittedAt?: string;
   generatedAt?: Date;
 };
-export function createSetupBrief(brief: SetupBrief) {
+export function createSetupBrief(brief: SetupBrief, logo?: Uint8Array) {
   const doc = new jsPDF({unit:'mm',format:'a4',compress:true});
   const brand = brief.brandName || 'Core Quantum Leads';
   const generated = brief.generatedAt || new Date();
   const date = generated.toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
   const navy = '#142B49', blue = '#1677D2', muted = '#62738A';
+  const logoProperties = logo ? doc.getImageProperties(logo) : null;
   let y=0;
   let sectionTitle='Setup overview';
   // Native PDF text remains searchable. Browser-rendered fallback preserves names
@@ -62,10 +63,25 @@ export function createSetupBrief(brief: SetupBrief) {
   }
   function page(first=false,continuation=true){
     if(!first) doc.addPage();
-    doc.setFillColor(navy);doc.rect(0,0,210,first?46:25,'F');
-    text(brand,18,first?16:15,11,'#FFFFFF',true);
-    if(first){text('CLIENT SETUP BRIEF',18,29,20,'#FFFFFF',true);text('Your onboarding details & implementation reference',18,38,9,'#C5DAF1');}
-    y=first?56:35;
+    const headerHeight=logoProperties?(first?68:32):(first?46:25);
+    doc.setFillColor(navy);doc.rect(0,0,210,headerHeight,'F');
+    if(logo && logoProperties){
+      const width=first?70:44;
+      const height=width*logoProperties.height/logoProperties.width;
+      doc.addImage(logo,'PNG',(210-width)/2,0,width,height,'cql-logo');
+    }else text(brand,18,first?16:15,11,'#FFFFFF',true);
+    if(first){
+      const titleY=logoProperties?51:29;
+      const title='CLIENT SETUP BRIEF';
+      const subtitle='Your onboarding details & implementation reference';
+      doc.setFont('helvetica','bold');doc.setFontSize(20);
+      const titleX=logoProperties?(210-doc.getTextWidth(title))/2:18;
+      text(title,titleX,titleY,20,'#FFFFFF',true);
+      doc.setFont('helvetica','normal');doc.setFontSize(9);
+      const subtitleX=logoProperties?(210-doc.getTextWidth(subtitle))/2:18;
+      text(subtitle,subtitleX,titleY+9,9,'#C5DAF1');
+    }
+    y=headerHeight+10;
     if(!first && continuation){text(`${sectionTitle} / continued`,18,y,10,blue,true);y+=10;}
   }
   function heading(title:string){
@@ -134,7 +150,10 @@ export function createSetupBrief(brief: SetupBrief) {
   return doc;
 }
 
-export function downloadSetupBrief(brief: SetupBrief){
+export async function downloadSetupBrief(brief: SetupBrief){
   const name=String(brief.answers.legalName||'draft').replace(/[^a-z0-9]/gi,'-').replace(/-+/g,'-').slice(0,100)||'client';
-  createSetupBrief(brief).save(`cql-setup-${name}.pdf`);
+  const response=await fetch('/cql-logo.png');
+  if(!response.ok) throw new Error('The PDF logo could not be loaded. Please try downloading again.');
+  const logo=new Uint8Array(await response.arrayBuffer());
+  createSetupBrief(brief,logo).save(`cql-setup-${name}.pdf`);
 }
