@@ -47,9 +47,9 @@ export default function SignIn({ onSignIn, initialError = '', initialLogin }: { 
 
       {error && <div className="signin-error" role="alert">{error}</div>}
 
-      <label className="field"><span>Email address</span><input type="email" name="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} disabled={busy}/></label>
+      <label className="field"><span>Email address<b className="required">* Required</b></span><input type="email" name="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} disabled={busy}/></label>
 
-      <label className="field"><span>Password</span><div className="signin-password"><input type={visible ? 'text' : 'password'} name="password" autoComplete="current-password" required maxLength={1024} value={password} onChange={event => setPassword(event.target.value)} disabled={busy}/><button type="button" aria-label={visible ? 'Hide password' : 'Show password'} aria-pressed={visible} onClick={() => setVisible(!visible)}>{visible ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></label>
+      <label className="field"><span>Password<b className="required">* Required</b></span><div className="signin-password"><input type={visible ? 'text' : 'password'} name="password" autoComplete="current-password" required maxLength={1024} value={password} onChange={event => setPassword(event.target.value)} disabled={busy}/><button type="button" aria-label={visible ? 'Hide password' : 'Show password'} aria-pressed={visible} onClick={() => setVisible(!visible)}>{visible ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></label>
 
       <button type="submit" className="btn primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}<ArrowRight size={17}/></button>
 

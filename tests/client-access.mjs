@@ -205,12 +205,13 @@ assert.equal((await api(`applications/${alpha.data.id}/secret`, {cookie: alphaCo
 assert.equal((await api('price-lists', {cookie: alphaCookie, body: ownUpload})).status, 403);
 await api(`applications/${alpha.data.id}/team`, {cookie: admin, method: 'PUT', body: {status: 'submitted', checklist: {}}});
 assert.equal((await api('applications/' + alpha.data.id, {cookie: alphaCookie, method: 'PUT', body: {data: savedData, step: 0}})).status, 200, 'submitted clients can correct their own information');
-const corrected={...completePreferences,legalName:'Corrected business name',reviewAccuracy:true,reviewAuthority:true,reviewUsage:true,signature:'Test Client'};
+const corrected={...completePreferences,legalName:'Corrected business name',reviewAccuracy:true,reviewAuthority:true,reviewUsage:true};
 const pricingVersion=(await api('session',{cookie:alphaCookie})).data.config.pricingVersion;
 for(const status of ['submitted','in_progress','ready','launched']){
  sqlite.prepare('UPDATE applications SET status=?,checklist=? WHERE id=?').run(status,JSON.stringify({'Review onboarding':'Complete'}),alpha.data.id);
  assert.equal((await api(`applications/${alpha.data.id}`,{cookie:alphaCookie,method:'PUT',body:{data:corrected,step:1}})).status,200);
  assert.equal((await api(`applications/${alpha.data.id}`,{cookie:betaCookie,method:'PUT',body:{data:corrected,step:1}})).status,403,'other clients cannot change submitted information');
+ assert.equal((await api(`applications/${alpha.data.id}/submit`,{cookie:alphaCookie,body:{data:{...corrected,reviewAuthority:false},pricingVersion}})).status,400,'an unchecked acknowledgment blocks submission');
  const sent=await api(`applications/${alpha.data.id}/submit`,{cookie:alphaCookie,body:{data:corrected,pricingVersion}});
  assert.equal(sent.status,200); assert.equal(sent.data.status,status);
  const persisted=(await api(`applications/${alpha.data.id}`,{cookie:alphaCookie})).data;

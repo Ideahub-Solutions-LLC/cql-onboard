@@ -1,6 +1,6 @@
 'use client';
 
-import { useContext, useId } from 'react';
+import { useContext, useState } from 'react';
 import { CheckField, Field as BaseField, FormContext, Section } from './form-parts';
 
 const Field = (props: Parameters<typeof BaseField>[0]) => <BaseField {...props} requiredLabel="* Required"/>;
@@ -10,11 +10,14 @@ const regions = ['Africa', 'Asia', 'Europe', 'Latin America', 'USA and Canada'];
 const languages = ['English (United States)', 'English (United Kingdom)', 'Spanish', 'French', 'German', 'Portuguese', 'Chinese', 'Japanese', 'Korean', 'Arabic', 'Hindi', 'Other'];
 const countries = ['United States', 'Canada', 'United Kingdom', 'Australia', 'New Zealand', 'Philippines', 'Taiwan', 'India', 'Singapore', 'Mexico', 'Other'];
 
-// Suggested values remain editable for businesses outside the common categories.
+// Use the shared dropdown style while preserving custom business and address values.
 function SuggestedField({ name, label, options, required = false, disabled = false }: { name: string; label: string; options: string[]; required?: boolean; disabled?: boolean }) {
-  const { data, set } = useContext(FormContext);
-  const id = useId();
-  return <label className="field"><span>{label}{required && <b className="required">* Required</b>}</span><input disabled={disabled} list={id} value={data[name] || ''} aria-required={required || undefined} maxLength={2000} onChange={event => set(name, event.target.value)}/><datalist id={id}>{[...new Set(options)].map(option => <option key={option} value={option}/>)}</datalist></label>;
+  const context = useContext(FormContext);
+  const [custom, setCustom] = useState(false);
+  const customOption = 'Enter a custom value…';
+  const savedCustom = context.data[name] && !options.includes(context.data[name]);
+  if (custom || savedCustom) return <div><Field name={name} label={label} required={required} disabled={disabled}/><button type="button" className="text-link" disabled={disabled} onClick={() => { setCustom(false); context.set(name, ''); }}>Choose from list</button></div>;
+  return <FormContext.Provider value={{...context, set: (field: string, value: string) => { if(value === customOption) { setCustom(true); context.set(field, ''); } else context.set(field, value); }}}><Field name={name} label={label} required={required} disabled={disabled} options={[...new Set([...options, customOption])]}/></FormContext.Provider>;
 }
 
 export default function BusinessProfile() {
@@ -41,7 +44,7 @@ export default function BusinessProfile() {
         <Field name="contactEmail" label="Business Email" type="email" required autoComplete="email"/>
         <Field name="contactPhone" label="Business Phone" type="tel" required autoComplete="tel"/>
         <Field name="website" label="Business Website" type="url" placeholder="https://yourbusiness.com" wide autoComplete="url"/>
-        <SuggestedField name="businessNiche" required label="Business Niche" options={['Marketing Agency', 'Dental Practice', 'Healthcare', 'Home Services', 'Real Estate', 'Professional Services', 'Retail', 'Other']}/>
+        <Field name="businessNiche" required label="Business Niche"/>
         <Field name="businessCurrency" label="Business Currency" options={currencies}/>
       </div>
     </Section></div>
@@ -54,7 +57,7 @@ export default function BusinessProfile() {
           <Field name="taxId" label="Business Registration Number" disabled={!!data.businessNotRegistered}/>
         </fieldset>
         <CheckField name="businessNotRegistered">My business is Not registered</CheckField>
-        <fieldset className="business-regions"><legend>Business Regions of Operations <b className="required">* Required</b></legend>{regions.map(region => <label className="check-field" key={region}><input type="checkbox" checked={(data.businessRegions || []).includes(region)} onChange={event => set('businessRegions', event.target.checked ? [...(data.businessRegions || []), region] : (data.businessRegions || []).filter((item: string) => item !== region))}/><span>{region}</span></label>)}</fieldset>
+        <fieldset className="business-regions"><legend>Business Regions of Operations <b className="required">* Required</b></legend>{regions.map(region => <label className="check-field" key={region}><input name="businessRegions" type="checkbox" checked={(data.businessRegions || []).includes(region)} onChange={event => set('businessRegions', event.target.checked ? [...(data.businessRegions || []), region] : (data.businessRegions || []).filter((item: string) => item !== region))}/><span>{region}</span></label>)}</fieldset>
       </div>
     </Section></div>
     <div className="business-profile-card"><Section title={labels[2]}>

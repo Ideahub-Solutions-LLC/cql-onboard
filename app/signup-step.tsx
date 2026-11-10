@@ -16,8 +16,8 @@ export default function SignupStep({config}:{config:{signupOptions:SignupOption[
  const chooseExisting=()=>{set('alreadyHaveAccount',true);set('signupId','');set('plan','I already have an account');set('signupDone',true);};
  return <div className="signup-step">
   {config.priceList&&<a className="price-list-download" href={'/api/price-lists/'+config.priceList.id}><span><strong>View the current price list</strong><small>{config.priceList.name}</small></span><ArrowUpRight size={17}/></a>}
-  <fieldset className="account-choice-group">
-   <legend className="account-choice-legend">Choose your account option <span className="required">*</span></legend>
+  <fieldset data-field="signupDone" className="account-choice-group">
+   <legend className="account-choice-legend">Choose your account option <span className="required">* Required</span></legend>
    <div className={'existing-account-panel '+(data.alreadyHaveAccount?'selected':'')}>
     <label className="existing-account-choice">
      <input type="radio" name="cql-account-option" value="existing" checked={!!data.alreadyHaveAccount} onChange={chooseExisting} aria-label="I already have a CQL account" aria-describedby="existing-account-description"/>

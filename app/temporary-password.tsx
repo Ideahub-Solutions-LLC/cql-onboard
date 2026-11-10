@@ -9,7 +9,7 @@ export default function TemporaryPassword({ value, onChange, disabled, required 
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState('');
   return <div className="temporary-password field">
-    <label htmlFor={id}>Temporary password</label>
+    <label htmlFor={id}>Temporary password{required&&<b className="required">* Required</b>}</label>
     <div className="temporary-password-input"><input id={id} name="temporaryPassword" type={visible ? 'text' : 'password'} autoComplete="new-password" minLength={12} maxLength={1024} required={required} value={value} disabled={disabled} aria-describedby={`${id}-strength ${id}-hint`} aria-invalid={value ? passwordStrength(value) === 'weak' : undefined} onChange={event => onChange(event.target.value)}/><button type="button" disabled={disabled} aria-label={visible ? 'Hide temporary password' : 'Show temporary password'} aria-pressed={visible} onClick={() => setVisible(!visible)}>{visible ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div>
     <button type="button" className="btn secondary full generate-password" disabled={disabled} onClick={() => {
       try { onChange(generateStrongPassword()); setError(''); } catch { setError('Unable to generate a password. Try again or enter one below.'); }

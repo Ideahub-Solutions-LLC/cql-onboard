@@ -36,7 +36,7 @@ export function ContactsFollowupStep() {
       {data.contactsPreference === contactOptions[0] && <div className="conditional-preferences">
         <Field name="contactListNotes" label="Anything we should know about your contacts? (optional)" rows={3} placeholder="List source, approximate size, tags, or other context."/>
         <Upload category="Contacts" title="Upload your contact files" description="Select multiple CSV, TSV, or Excel files · Up to 10 MB per file"/>
-        <CheckField name="contactImportPermission">I confirm I have permission to import these contacts and contact them in accordance with applicable law. <b className="required">* Required</b></CheckField>
+        <CheckField name="contactImportPermission" required>I confirm I have permission to import these contacts and contact them in accordance with applicable law.</CheckField>
       </div>}
     </Section>
     <Section title="Your follow-up playbook" description="Upload an existing process or tell us how you want leads handled.">

@@ -18,9 +18,9 @@ function BrandColor({ name, label, required }: typeof brandColors[number]) {
     set(name, colorHex(text) || text);
   };
   return <div className="brand-color-row">
-    <div className="brand-color-label">{label}{required ? <b className="required">*</b> : <small>Optional</small>}</div>
+    <div className="brand-color-label">{label}{required ? <b className="required">* Required</b> : <small>Optional</small>}</div>
     <label className="brand-color-picker"><span>Color picker</span><input type="color" aria-label={`${label} color picker`} value={valid || '#000000'} onChange={event => { setEditing(null); set(name, event.target.value.toUpperCase()); }}/></label>
-    <label className="field"><span>Hex</span><input aria-label={`${label} Hex`} aria-required={required || undefined} aria-invalid={invalid || undefined} aria-describedby={invalid ? id : undefined} placeholder="#1677D2" maxLength={32} value={editing?.kind === 'hex' ? editing.text : valid || (editing?.kind === 'rgb' ? '' : value)} onChange={event => update(event.target.value, 'hex')} onBlur={() => { if (valid) setEditing(null); }}/></label>
+    <label className="field"><span>Hex</span><input name={name} aria-label={`${label} Hex`} aria-required={required || undefined} aria-invalid={invalid || undefined} aria-describedby={invalid ? id : undefined} placeholder="#1677D2" maxLength={32} value={editing?.kind === 'hex' ? editing.text : valid || (editing?.kind === 'rgb' ? '' : value)} onChange={event => update(event.target.value, 'hex')} onBlur={() => { if (valid) setEditing(null); }}/></label>
     <label className="field"><span>RGB</span><input aria-label={`${label} RGB`} aria-invalid={invalid || undefined} aria-describedby={invalid ? id : undefined} placeholder="22, 119, 210" maxLength={32} value={editing?.kind === 'rgb' ? editing.text : colorRgb(value)} onChange={event => update(event.target.value, 'rgb')} onBlur={() => { if (valid) setEditing(null); }}/></label>
     <button type="button" className="text-link" disabled={!value} aria-label={`Clear ${label}`} onClick={() => { setEditing(null); set(name, ''); }}>Clear</button>
     {invalid && <p className="brand-color-error" id={id} role="alert">Use a Hex color such as #1677D2 or RGB values from 0 to 255.</p>}

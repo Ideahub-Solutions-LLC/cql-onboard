@@ -26,8 +26,8 @@ export function NewClientModal({ onClose, onCreated }: {onClose: () => void; onC
   }}>
     <button type="button" className="close" aria-label="Close new client" disabled={busy} onClick={onClose}><X size={20}/></button>
     <div className="modal-icon"><KeyRound size={24}/></div><h2 id="new-client-heading">A new beginning.</h2><p>Create an application and sign-in account for your client.</p>
-    <label className="field"><span>Business name</span><input name="business" required disabled={busy}/></label>
-    <label className="field"><span>Client’s sign-in email</span><input name="email" type="email" autoComplete="off" required maxLength={254} disabled={busy}/><small>No email is sent automatically.</small></label>
+    <label className="field"><span>Business name<b className="required">* Required</b></span><input name="business" required disabled={busy}/></label>
+    <label className="field"><span>Client’s sign-in email<b className="required">* Required</b></span><input name="email" type="email" autoComplete="off" required maxLength={254} disabled={busy}/><small>No email is sent automatically.</small></label>
     <TemporaryPassword value={password} onChange={setPassword} disabled={busy} hint="Leave blank only if this email already has a client account; its password will stay unchanged."/>
     {error && <p className="signin-error" role="alert">{error}</p>}
     <button className="btn primary full" disabled={busy || !!password && passwordStrength(password) === 'weak'}>{busy ? 'Creating client…' : 'Create client workspace'}</button>

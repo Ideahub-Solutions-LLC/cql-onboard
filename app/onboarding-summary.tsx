@@ -20,7 +20,7 @@ export default function OnboardingSummary({config}: {config: {signupOptions: {id
     const attachments=files.filter((file:{category:string})=>categories.includes(file.category));
     const title=section.title.replace(/^\d+ \/ /,'');
     return <details className="onboarding-summary" key={title}>
-      <summary><strong>{title}</strong><ArrowRight size={18} aria-hidden="true"/></summary>
+      <summary><ArrowRight size={18} aria-hidden="true"/><strong>{title}</strong></summary>
       <div className="onboarding-summary-body"><dl>{briefRows(values).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
         {attachments.length>0 && <div className="onboarding-summary-files"><strong>Uploaded documents</strong><ul>{attachments.map((file:{id:string;name:string;category:string})=><li key={file.id}>{file.name} <small>({file.category})</small></li>)}</ul></div>}
       </div>

@@ -113,7 +113,7 @@ export function stepErrors(step:number,d:Answers,config:Config):string[]{
  }
  return errors;
 }
-export function submissionErrors(d:Answers,config:Config){const errors=activeStepIndices.flatMap(i=>stepErrors(i,d,config));if(!d.reviewAccuracy||!d.reviewUsage||!d.reviewAuthority||!answer(d,'signature'))errors.push('Complete the acknowledgments and type your name.');return errors;}
+export function submissionErrors(d:Answers,config:Config){const errors=activeStepIndices.flatMap(i=>stepErrors(i,d,config));if(!d.reviewAccuracy||!d.reviewUsage||!d.reviewAuthority)errors.push('Complete the required acknowledgments.');return errors;}
 export function unlockedStep(d:Answers,config:Config){let position=0;while(position<activeStepIndices.length-1&&list(d,'completedSteps').includes(String(activeStepIndices[position]))&&!stepErrors(activeStepIndices[position],d,config).length)position++;return activeStepIndices[position];}
 export function resumeStep(raw:Answers,storedStep:number,config:Config){const mapped=raw.flowVersion===FLOW_VERSION?storedStep:storedStep===0?0:storedStep===1?1:storedStep===7?3:2;return activeStepIndices[Math.max(0,Math.min(activeStepIndices.indexOf(!setupStepEnabled&&mapped===2?BRANDING_STEP:mapped),activeStepIndices.indexOf(unlockedStep(normalizeOnboarding(raw),config))))];}
 export function deferredSetupItems(d:Answers):string[]{

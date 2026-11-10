@@ -14,7 +14,7 @@ import OnboardingSummary from './onboarding-summary';
 import {deferredSetupItems,missingFields} from '../lib/shared';
 import {activeStepIndices,setupStepEnabled,setupServices,hasService} from '../lib/onboarding';
 
-export default function StepContent({step,config,exportBrief}:any){
+export default function StepContent({step,config}:any){
  const {data}=useContext(FormContext);
  const service=(name:string)=>hasService(data,name);
  const later=deferredSetupItems(data);
@@ -87,12 +87,10 @@ export default function StepContent({step,config,exportBrief}:any){
    <details className="quick-details"><summary>Your subscription & usage rates <span>Review pricing</span></summary><div className="quick-details-body"><Note>Your account and billing arrangement will be verified by the team. Items marked Confirm with CQL need a quote before activation.</Note><FeeMenu config={config}/></div></details>
    {!!data.requestedFeatures?.length&&<Section title="Extra feature requests"><p>{data.requestedFeatures.join(' · ')}</p><p className="setup-later-note">Requests are for team review and do not activate services or charge your card.</p></Section>}
    <Section title="Confirm & send">
-    <CheckField name="reviewAccuracy">The details in this brief are accurate, and I authorize the CQL team to use them for the setup requested.</CheckField>
-    <CheckField name="reviewAuthority">I’m authorized to provide this business information and any documents, contacts, or account access shared.</CheckField>
-    <CheckField name="reviewUsage">I understand that subscription, usage, and optional services may have additional charges. Unconfirmed rates need a separate quote and acceptance before activation. Sending this brief does not charge my card.</CheckField>
-    <Field name="signature" label="Your full name to acknowledge" required placeholder="Type your name"/>
+    <CheckField name="reviewAccuracy" required>The details in this brief are accurate, and I authorize the CQL team to use them for the setup requested.</CheckField>
+    <CheckField name="reviewAuthority" required>I’m authorized to provide this business information and any documents, contacts, or account access shared.</CheckField>
+    <CheckField name="reviewUsage" required>I understand that subscription, usage, and optional services may have additional charges. Unconfirmed rates need a separate quote and acceptance before activation. Sending this brief does not charge my card.</CheckField>
    </Section>
-   <button type="button" className="btn secondary" onClick={exportBrief}><FileDown size={16}/> Download my setup brief (PDF)</button>
   </>}
  </>;
 }
