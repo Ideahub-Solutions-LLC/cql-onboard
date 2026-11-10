@@ -53,7 +53,7 @@ html,body,.shell,.workspace{background:#e5eef6}.topbar{background:#10273b;min-he
 
 /* Sidebar actions and compact navigation controls. */
 .shell{--sidebar-width:264px}
-.shell:not(.client-session):not(.menu-hidden) .topbar{display:none}
+
 @media(min-width:769px){.client-session:not(.menu-hidden) .onboarding-brand{display:none}}
 .sidebar{overflow-y:auto}
 .sidebar-bottom{flex-shrink:0;padding-bottom:52px}
@@ -68,7 +68,7 @@ html,body,.shell,.workspace{background:#e5eef6}.topbar{background:#10273b;min-he
 @media(max-width:1250px){.shell{--sidebar-width:235px}}
 @media(max-width:1050px){.shell{--sidebar-width:225px}}
 @media(max-width:768px){
-  .shell:not(.client-session):not(.menu-hidden) .topbar{display:flex}
+
   .sidebar-collapse{display:none}
   .sidebar .brand,.sidebar .workspace-label{display:none}
   .sidebar{padding:12px 18px}
@@ -224,7 +224,7 @@ select option {
 
 /* Workspace header and compact step rail. */
 .required,.business-profile .required,.preference-card .required{color:#b42318;font-size:12px;font-weight:600;margin-left:5px;white-space:nowrap}
-.shell:not(.client-session):not(.menu-hidden) .topbar{display:flex}
+
 .topbar{height:auto;min-height:88px;padding:16px 32px;gap:20px;background:#fff;flex-wrap:wrap}
 .topbar-start{gap:24px;min-width:0}.header-title{color:#37556f;font-size:14px}
 .header-progress{width:160px;max-width:100%}.header-progress>div:first-child{display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#536e84}.header-progress .progress-track{background:#e5edf4;margin-bottom:0}
@@ -311,3 +311,38 @@ select option {
 .success-card .btn{max-width:100%;white-space:normal;text-align:center}
 .success-reference{flex-wrap:wrap}
 .topbar .header-tools .team-entry{color:#37556f}
+
+/* Signed-in identity and the original dark workspace header. */
+.topbar{background:#10273b;color:#e4f1fa;border-bottom-color:#355165}
+.topbar .workspace-clock time{color:#c4dbe9}
+.topbar .workspace-clock select{background-color:#19374d;border-color:#42647e;color:#e4f1fa}
+.topbar .workspace-clock select::picker-icon{color:#c4dbe9}
+.topbar .header-progress>div:first-child{color:#b6cddd}
+.topbar .header-progress strong{color:#f0f8ff}
+.topbar .header-progress .progress-track{background:#29475e}
+.topbar .header-tools .team-entry{color:#d3e6f3}
+.topbar .header-tools>.pricing-entry{display:inline-flex;align-items:center;justify-content:center;border-color:#42647e;background:#19374d;color:#e4f1fa;min-height:44px;white-space:nowrap}
+.topbar .header-tools>.pricing-entry:hover{background:#254b65;border-color:#6b96b7}
+.profile-account{display:flex;align-items:center;justify-content:flex-end;gap:12px;min-width:0;max-width:100%}
+.profile-identity{display:flex;flex-direction:column;gap:3px;min-width:0;max-width:230px;text-align:right;line-height:1.4}
+.profile-identity strong{display:block;font-size:13px;font-weight:600;color:#f0f8ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile-identity>span{display:block;font-size:12px;color:#b6cddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar .profile-menu>.avatar{background:#234b68;color:#e4f1fa;border-color:#42647e;outline-color:#6a8ba4}
+@media(max-width:1150px){.profile-identity{max-width:180px}.header-tools{gap:12px}}
+@media(max-width:768px){
+ .topbar{grid-template-columns:minmax(0,1fr);gap:14px;padding:14px 12px}
+ .workspace-clock{grid-column:1;grid-row:1}
+ .topbar-start{grid-column:1;grid-row:2;flex-direction:row;align-items:center;min-height:0}
+ .topbar-start:empty{display:none}
+ .header-progress{width:100%;max-width:none}
+ .header-tools{grid-column:1;grid-row:3;width:100%;flex-wrap:wrap;justify-content:flex-end;gap:12px}
+ .topbar .header-tools>.pricing-entry{margin-right:auto;font-size:12px;padding:9px 11px!important;max-width:100%}
+ .header-tools .profile-account{margin-left:auto;flex:0 1 auto;gap:9px}
+ .profile-identity{max-width:180px}
+ .topbar .profile-menu>.avatar{width:40px;height:40px}
+ .client-content{scroll-margin-top:220px}
+}
+@media(max-width:480px){
+ .header-tools{gap:12px 10px}
+ .profile-identity{max-width:160px}.profile-identity strong{font-size:12px}.profile-identity>span{font-size:11px}
+}
