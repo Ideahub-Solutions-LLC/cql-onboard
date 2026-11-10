@@ -346,3 +346,8 @@ select option {
  .header-tools{gap:12px 10px}
  .profile-identity{max-width:160px}.profile-identity strong{font-size:12px}.profile-identity>span{font-size:11px}
 }
+
+@media(max-width:768px){
+ .topbar .profile-identity{max-width:230px}
+ .topbar .profile-identity>span{white-space:normal;overflow-wrap:anywhere;overflow:visible;text-overflow:clip}
+}
