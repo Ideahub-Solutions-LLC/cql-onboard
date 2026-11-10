@@ -1,12 +1,11 @@
 'use client';
 
-import { useContext, useId, useState } from 'react';
-import { Tabs } from 'radix-ui';
+import { useContext, useId } from 'react';
 import { CheckField, Field as BaseField, FormContext, Section } from './form-parts';
 
 const Field = (props: Parameters<typeof BaseField>[0]) => <BaseField {...props} requiredLabel="* Required"/>;
 
-const labels = ['General information', 'Business Information', 'Business Physical Address', 'Authorized Representative'];
+const labels = ['General Information', 'Business information', 'Business Physical Address', 'Authorize Representative'];
 const regions = ['Africa', 'Asia', 'Europe', 'Latin America', 'USA and Canada'];
 const languages = ['English (United States)', 'English (United Kingdom)', 'Spanish', 'French', 'German', 'Portuguese', 'Chinese', 'Japanese', 'Korean', 'Arabic', 'Hindi', 'Other'];
 const countries = ['United States', 'Canada', 'United Kingdom', 'Australia', 'New Zealand', 'Philippines', 'Taiwan', 'India', 'Singapore', 'Mexico', 'Other'];
@@ -20,7 +19,6 @@ function SuggestedField({ name, label, options, required = false, disabled = fal
 
 export default function BusinessProfile() {
   const context = useContext(FormContext);
-  const [tab, setTab] = useState('0');
   const name = String(context.data.representative || context.data.contactName || '').trim().split(/\s+/);
   const data = {
     ...context.data,
@@ -35,9 +33,8 @@ export default function BusinessProfile() {
   });
   const timezones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : ['America/Los_Angeles', 'America/Denver', 'America/Chicago', 'America/New_York', 'Europe/London', 'Asia/Taipei', 'Asia/Manila', 'UTC'];
   const currencies = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('currency') : ['USD', 'CAD', 'GBP', 'AUD', 'EUR', 'PHP', 'TWD'];
-  return <FormContext.Provider value={{ ...context, data, set }}><Tabs.Root value={tab} onValueChange={setTab} className="business-profile">
-    <Tabs.List className="business-profile-tabs" aria-label="Business details">{labels.map((label, index) => <Tabs.Trigger type="button" key={label} value={String(index)}>{label}</Tabs.Trigger>)}</Tabs.List>
-    <Tabs.Content value="0" className="business-profile-panel"><Section title={labels[0]}>
+  return <FormContext.Provider value={{ ...context, data, set }}><div className="business-profile">
+    <div className="business-profile-card"><Section title={labels[0]}>
       <div className="form-grid">
         <Field name="friendlyBusinessName" required label="Friendly Business Name" wide autoComplete="organization"/>
         <Field name="legalName" label="Legal Business Name" hint="Enter the exact legal business name, as registered with your business registration ID." required wide/>
@@ -47,8 +44,8 @@ export default function BusinessProfile() {
         <SuggestedField name="businessNiche" required label="Business Niche" options={['Marketing Agency', 'Dental Practice', 'Healthcare', 'Home Services', 'Real Estate', 'Professional Services', 'Retail', 'Other']}/>
         <Field name="businessCurrency" label="Business Currency" options={currencies}/>
       </div>
-    </Section></Tabs.Content>
-    <Tabs.Content value="1" className="business-profile-panel"><Section title={labels[1]}>
+    </Section></div>
+    <div className="business-profile-card"><Section title={labels[1]}>
       <div className="business-profile-stack">
         <SuggestedField name="businessType" required label="Business Type" options={['Limited Liability Company Or Sole-Proprietorship', 'Corporation', 'Partnership', 'Nonprofit', 'Cooperative', 'Other']}/>
         <SuggestedField name="businessIndustry" required={!data.businessNotRegistered} disabled={!!data.businessNotRegistered} label="Business Industry" options={['Technology', 'Healthcare', 'Finance', 'Education', 'Construction', 'Professional Services', 'Retail', 'Other']}/>
@@ -59,8 +56,8 @@ export default function BusinessProfile() {
         <CheckField name="businessNotRegistered">My business is Not registered</CheckField>
         <fieldset className="business-regions"><legend>Business Regions of Operations <b className="required">* Required</b></legend>{regions.map(region => <label className="check-field" key={region}><input type="checkbox" checked={(data.businessRegions || []).includes(region)} onChange={event => set('businessRegions', event.target.checked ? [...(data.businessRegions || []), region] : (data.businessRegions || []).filter((item: string) => item !== region))}/><span>{region}</span></label>)}</fieldset>
       </div>
-    </Section></Tabs.Content>
-    <Tabs.Content value="2" className="business-profile-panel"><Section title={labels[2]}>
+    </Section></div>
+    <div className="business-profile-card"><Section title={labels[2]}>
       <div className="form-grid">
         <Field name="address" required label="Street Address" wide autoComplete="street-address"/>
         <Field name="city" required label="City" autoComplete="address-level2"/>
@@ -71,8 +68,8 @@ export default function BusinessProfile() {
         <Field name="platformLanguage" label="Platform Language" options={languages} wide/>
         <Field name="outboundLanguage" label="Outbound communication language for custom values" options={languages} wide/>
       </div>
-    </Section></Tabs.Content>
-    <Tabs.Content value="3" className="business-profile-panel"><Section title={labels[3]}>
+    </Section></div>
+    <div className="business-profile-card"><Section title={labels[3]}>
       <div className="form-grid">
         <Field name="representativeFirstName" label="First Name" required autoComplete="given-name"/>
         <Field name="representativeLastName" required label="Last Name" autoComplete="family-name"/>
@@ -80,7 +77,7 @@ export default function BusinessProfile() {
         <div className="wide"><SuggestedField name="representativeJobPosition" required label="Job Position" options={['CEO', 'Owner', 'President', 'Director', 'Manager', 'Other']}/></div>
         <Field name="representativePhone" required label="Phone Number (With Country Code)" type="tel" wide/>
       </div>
-    </Section></Tabs.Content>
+    </Section></div>
 
-  </Tabs.Root></FormContext.Provider>;
+  </div></FormContext.Provider>;
 }
