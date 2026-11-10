@@ -201,7 +201,7 @@ select option {
   }
 }
 
-.onboarding-summary{border:1px solid #d3e2ee;border-radius:10px;background:white;min-width:0;overflow:hidden}.onboarding-summary>summary{display:flex;align-items:center;justify-content:space-between;gap:16px;list-style:none;padding:20px;cursor:pointer;color:#2b506d;font-size:16px}.onboarding-summary>summary::-webkit-details-marker{display:none}.onboarding-summary>summary svg{flex-shrink:0;color:var(--accent);transition:transform .18s ease}.onboarding-summary[open]>summary svg{transform:rotate(90deg)}.onboarding-summary>summary:hover{background:#f0f7fd}.onboarding-summary>summary:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}.onboarding-summary-body{padding:0 20px 20px;border-top:1px solid #e2ebf2}.onboarding-summary-body dl>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:18px;padding:12px 0;border-bottom:1px solid #e8eef3;font-size:14px;line-height:1.7}.onboarding-summary-body dt{font-weight:600;color:#536e84}.onboarding-summary-body dd{margin:0;color:#2b506d;white-space:pre-wrap;overflow-wrap:anywhere}.onboarding-summary-files{margin-top:16px;font-size:14px;overflow-wrap:anywhere}.onboarding-summary-files ul{padding-left:20px;margin-top:8px}@media(max-width:550px){.onboarding-summary>summary{padding:17px}.onboarding-summary-body{padding:0 17px 17px}.onboarding-summary-body dl>div{grid-template-columns:1fr;gap:3px}}
+.onboarding-summary{border:1px solid #d3e2ee;border-radius:10px;background:white;min-width:0;overflow:hidden}.onboarding-summary>summary{display:list-item;list-style:revert;padding:20px;cursor:pointer;color:#2b506d;font-size:16px}.onboarding-summary>summary:hover{background:#f0f7fd}.onboarding-summary>summary:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}.onboarding-summary-body{padding:0 20px 20px;border-top:1px solid #e2ebf2}.onboarding-summary-body dl>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:18px;padding:12px 0;border-bottom:1px solid #e8eef3;font-size:14px;line-height:1.7}.onboarding-summary-body dt{font-weight:600;color:#536e84}.onboarding-summary-body dd{margin:0;color:#2b506d;white-space:pre-wrap;overflow-wrap:anywhere}.onboarding-summary-files{margin-top:16px;font-size:14px;overflow-wrap:anywhere}.onboarding-summary-files ul{padding-left:20px;margin-top:8px}@media(max-width:550px){.onboarding-summary>summary{padding:17px}.onboarding-summary-body{padding:0 17px 17px}.onboarding-summary-body dl>div{grid-template-columns:1fr;gap:3px}}
 
 /* Keep the sidebar logo visible when the onboarding menu needs to scroll. */
 .sidebar > .brand { flex-shrink: 0; }
@@ -237,8 +237,6 @@ select option {
 .menu-hidden .workspace-label,.menu-hidden .sidebar-rule,.menu-hidden .journey-label,.menu-hidden .sidebar-bottom,.menu-hidden .step-link>span:not(.step-number),.menu-hidden .step-link>svg{display:none}
 .menu-hidden .step-link{justify-content:center;padding:10px 0;min-height:48px}.menu-hidden .steps-nav{gap:8px}.menu-hidden .sidebar-collapse{display:grid;left:58px}.sidebar-collapse{bottom:16px}
 .menu-hidden .admin-nav .step-link>svg{display:block;margin:0}
-.onboarding-summary>summary{justify-content:flex-start}
-.onboarding-summary>summary svg{order:0}
 @media(max-width:1050px){.header-title{display:none}.topbar{padding:14px 22px}.header-tools{gap:12px}}
 @media(max-width:768px){
  .shell,.shell.menu-hidden{display:block;--sidebar-width:64px}
@@ -351,3 +349,6 @@ select option {
  .topbar .profile-identity{max-width:230px}
  .topbar .profile-identity>span{white-space:normal;overflow-wrap:anywhere;overflow:visible;text-overflow:clip}
 }
+
+.onboarding-summary>summary::marker{font-size:14px;color:#315a79}
+@media(max-width:750px){.onboarding-summary>summary::marker{font-size:13px}}
