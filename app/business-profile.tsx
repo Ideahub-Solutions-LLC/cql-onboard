@@ -5,7 +5,7 @@ import { CheckField, Field as BaseField, FormContext, Section } from './form-par
 
 const Field = (props: Parameters<typeof BaseField>[0]) => <BaseField {...props} requiredLabel="* Required"/>;
 
-const labels = ['General Information', 'Business information', 'Business Physical Address', 'Authorize Representative'];
+const labels = ['General Information', 'Business information', 'Business Physical Address', 'Authorized Representative'];
 const regions = ['Africa', 'Asia', 'Europe', 'Latin America', 'USA and Canada'];
 const languages = ['English (United States)', 'English (United Kingdom)', 'Spanish', 'French', 'German', 'Portuguese', 'Chinese', 'Japanese', 'Korean', 'Arabic', 'Hindi', 'Other'];
 const countries = ['United States', 'Canada', 'United Kingdom', 'Australia', 'New Zealand', 'Philippines', 'Taiwan', 'India', 'Singapore', 'Mexico', 'Other'];
