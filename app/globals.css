@@ -53,7 +53,8 @@ html,body,.shell,.workspace{background:#e5eef6}.topbar{background:#10273b;min-he
 
 /* Sidebar actions and compact navigation controls. */
 .shell{--sidebar-width:264px}
-.shell:not(.menu-hidden) .topbar{display:none}
+.shell:not(.client-session):not(.menu-hidden) .topbar{display:none}
+@media(min-width:769px){.client-session:not(.menu-hidden) .onboarding-brand{display:none}}
 .sidebar{overflow-y:auto}
 .sidebar-bottom{flex-shrink:0;padding-bottom:52px}
 .sidebar-action{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:11px 14px;border-radius:8px;text-align:left;font-size:12px;color:#c4dbe9}
@@ -67,7 +68,7 @@ html,body,.shell,.workspace{background:#e5eef6}.topbar{background:#10273b;min-he
 @media(max-width:1250px){.shell{--sidebar-width:235px}}
 @media(max-width:1050px){.shell{--sidebar-width:225px}}
 @media(max-width:768px){
-  .shell:not(.menu-hidden) .topbar{display:flex}
+  .shell:not(.client-session):not(.menu-hidden) .topbar{display:flex}
   .sidebar-collapse{display:none}
   .sidebar .brand,.sidebar .workspace-label{display:none}
   .sidebar{padding:12px 18px}
