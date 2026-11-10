@@ -305,3 +305,9 @@ select option {
  .client-content .form-card-header{padding:22px 18px}
  .step-eyebrow{flex-wrap:wrap;row-gap:5px}
 }
+
+/* Let the submitted confirmation fit alongside the compact mobile step rail. */
+.success-layout>.success-card{min-width:0;overflow-wrap:anywhere}
+.success-card .btn{max-width:100%;white-space:normal;text-align:center}
+.success-reference{flex-wrap:wrap}
+.topbar .header-tools .team-entry{color:#37556f}
