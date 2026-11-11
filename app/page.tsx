@@ -35,6 +35,7 @@ useEffect(()=>{const link=readLoginLink(location.href);if(link.hasCredentials){l
 useEffect(()=>{try{const preference=localStorage.getItem('cql-navigation-hidden');setMenuHidden(window.matchMedia('(max-width:768px)').matches||preference==='true');}catch{}},[]);
 useEffect(()=>{const mobile=window.matchMedia('(max-width:768px)');const collapse=(event:MediaQueryListEvent)=>{if(event.matches)setMenuHidden(true);};mobile.addEventListener('change',collapse);return()=>mobile.removeEventListener('change',collapse);},[]);
 useEffect(()=>{document.documentElement.style.setProperty('--accent',config.accent);},[config.accent]);
+useEffect(()=>{if(!session?.admin)return;const timer=setInterval(()=>{if(view==='team')refresh().catch(()=>{});},5000);return()=>clearInterval(timer);},[session,view]);
 
 useEffect(()=>{const h=(e:BeforeUnloadEvent)=>{if(edited||settingsDirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',h);return()=>window.removeEventListener('beforeunload',h);},[edited,settingsDirty]);
 const setMany=(values:Record<string,any>)=>{setData((d:any)=>normalizeOnboarding({...d,...(app?.submitted_at&&step!==REVIEW_STEP?{reviewAccuracy:false,reviewAuthority:false,reviewUsage:false}:{}),...values,flowVersion:FLOW_VERSION,completedSteps:app?.submitted_at?(d.completedSteps||[]):(d.completedSteps||[]).filter((i:string)=>activeStepIndices.indexOf(Number(i))<activeStepIndices.indexOf(step))}));setEdited(true);};
