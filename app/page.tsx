@@ -55,7 +55,7 @@ const submit=async()=>{const invalidStep=activeStepIndices.find(i=>stepErrors(i,
 const allTasks=(d:any)=>[...taskNames,...applicationTasks(d),...onboardingTasks(d)];
 const toggleFeature=(name:string)=>{setData((d:any)=>({...d,requestedFeatures:(d.requestedFeatures||[]).includes(name)?d.requestedFeatures.filter((x:string)=>x!==name):[...(d.requestedFeatures||[]),name],reviewUsage:false}));setEdited(true);};
 const locked=session?.admin?app?.status==='deleting':app?.status==='deleting'||(!!app?.submitted_at&&app?.status!=='in_progress');
-const success=app&&['submitted','in_progress','ready','launched'].includes(app.status)&&view==='client'&&!editingSubmission;
+const success=app&&['submitted','ready','launched'].includes(app.status)&&view==='client'&&!editingSubmission;
 const unlocked=unlockedStep(data,config);
 const completed=success?activeStepIndices.length:activeStepIndices.indexOf(unlocked);
 const progress=Math.round(completed/activeStepIndices.length*100);
